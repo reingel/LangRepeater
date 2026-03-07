@@ -1,0 +1,7 @@
+__pycache__/
+*.egg-info/
+
+*.pyc
+progress.yaml
+stat.yaml
+.DS_Store

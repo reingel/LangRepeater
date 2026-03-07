@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "langrepeater"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pygame>=2.5",
+    "python-vlc>=3.0",
+    "srt>=3.5",
+    "pynput>=1.7",
+    "rich>=13.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+LangRepeater = "langrepeater.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["langrepeater*"]
