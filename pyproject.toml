@@ -13,10 +13,20 @@ dependencies = [
     "pynput>=1.7",
     "rich>=13.0",
     "pyyaml>=6.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.28",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
 ]
 
 [project.scripts]
 LangRepeater = "langrepeater.main:main"
+LangRepeaterAPI = "langrepeater.api_main:main"
+LangRepeaterMac = "langrepeater.macos_app.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
