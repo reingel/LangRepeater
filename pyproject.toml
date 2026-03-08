@@ -26,6 +26,7 @@ dev = [
 [project.scripts]
 LangRepeater = "langrepeater.main:main"
 LangRepeaterAPI = "langrepeater.api_main:main"
+LangRepeaterMac = "langrepeater.macos_app.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
