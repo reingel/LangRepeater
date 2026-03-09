@@ -1,9 +1,24 @@
+import datetime
+
 import srt
 
 from .models import Subtitle
 
 
 class SRTParser:
+    def save(self, path: str, subtitles: list[Subtitle]) -> None:
+        srt_subtitles = [
+            srt.Subtitle(
+                index=sub.index,
+                start=datetime.timedelta(seconds=sub.start),
+                end=datetime.timedelta(seconds=sub.end),
+                content=sub.text,
+            )
+            for sub in subtitles
+        ]
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(srt.compose(srt_subtitles))
+
     def load(self, path: str) -> list[Subtitle]:
         with open(path, encoding="utf-8") as f:
             content = f.read()

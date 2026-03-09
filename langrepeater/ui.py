@@ -14,7 +14,8 @@ class RichUI:
         console.print(Panel(
             "[bold cyan]LangRepeater[/bold cyan]\n"
             "Audio segment repeater for language learning\n\n"
-            "[dim]Space/S: play  |  D/→: next  |  A/←: prev  |  Q/ESC: quit[/dim]",
+            "[dim]Space/S: play  |  D/→: next  |  A/←: prev  |  Q/ESC: quit[/dim]\n"
+            "[dim]Z: start -0.1s  |  X: start +0.1s  |  N: end -0.1s  |  M: end +0.1s[/dim]",
             expand=False,
         ))
 
@@ -51,9 +52,11 @@ class RichUI:
         for idx in indices:
             sub = subtitles[idx]
             if idx == current_index:
+                ts = f"[{sub.start:.1f}s ~ {sub.end:.1f}s]"
                 line = Text()
                 line.append(f"{sub.index:>4}  ", style="dim")
                 line.append(sub.text, style="bold white")
+                line.append(f"  {ts}", style="dim cyan")
                 console.print(line)
             else:
                 console.print(f"[dim]{sub.index:>4}  {sub.text}[/dim]")

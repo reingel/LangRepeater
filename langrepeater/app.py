@@ -135,6 +135,14 @@ class AppController:
                     self._handle_next()
                 elif action == Action.PREV:
                     self._handle_prev()
+                elif action == Action.SHIFT_START_EARLIER:
+                    self._handle_shift_start(-0.1)
+                elif action == Action.SHIFT_START_LATER:
+                    self._handle_shift_start(0.1)
+                elif action == Action.SHIFT_END_EARLIER:
+                    self._handle_shift_end(-0.1)
+                elif action == Action.SHIFT_END_LATER:
+                    self._handle_shift_end(0.1)
         finally:
             termios.tcflush(fd, termios.TCIFLUSH)
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -171,6 +179,28 @@ class AppController:
         sub = self.subtitles[self.current_index]
         self.player.play_segment(self.media_path, sub.start, sub.end)
         self.stats_store.increment_play(self.media_path, sub.index)
+
+    def _handle_shift_start(self, delta: float) -> None:
+        if not self.subtitles:
+            return
+        sub = self.subtitles[self.current_index]
+        new_start = max(0.0, sub.start + delta)
+        if new_start >= sub.end:
+            return
+        sub.start = round(new_start, 1)
+        self.srt_parser.save(self.srt_path, self.subtitles)
+        self._refresh_display()
+
+    def _handle_shift_end(self, delta: float) -> None:
+        if not self.subtitles:
+            return
+        sub = self.subtitles[self.current_index]
+        new_end = sub.end + delta
+        if new_end <= sub.start:
+            return
+        sub.end = round(new_end, 1)
+        self.srt_parser.save(self.srt_path, self.subtitles)
+        self._refresh_display()
 
     def _refresh_display(self) -> None:
         self.ui.show_subtitles(self.subtitles, self.current_index)

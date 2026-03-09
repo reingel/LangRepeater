@@ -9,6 +9,10 @@ class Action(Enum):
     NEXT = auto()
     PREV = auto()
     QUIT = auto()
+    SHIFT_START_EARLIER = auto()
+    SHIFT_START_LATER = auto()
+    SHIFT_END_EARLIER = auto()
+    SHIFT_END_LATER = auto()
 
 
 _KEY_MAP: dict[str, Action] = {
@@ -16,6 +20,10 @@ _KEY_MAP: dict[str, Action] = {
     "d": Action.NEXT,
     "a": Action.PREV,
     "q": Action.QUIT,
+    "z": Action.SHIFT_START_EARLIER,
+    "x": Action.SHIFT_START_LATER,
+    "n": Action.SHIFT_END_EARLIER,
+    "m": Action.SHIFT_END_LATER,
 }
 
 
