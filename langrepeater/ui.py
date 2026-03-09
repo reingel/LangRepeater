@@ -85,6 +85,18 @@ class RichUI:
                     return None
             console.print("[red]Please enter a valid number.[/red]")
 
+    def ask_folder(self, previous_dir: str) -> str:
+        console.print("\n[bold]Select folder:[/bold]")
+        console.print(f"  [cyan]1[/cyan]. Same folder: [dim]{previous_dir}[/dim]")
+        console.print(f"  [cyan]2[/cyan]. Different folder")
+        while True:
+            raw = console.input("\nEnter number (1-2): ").strip()
+            if raw == "1":
+                return previous_dir
+            if raw == "2":
+                return self.ask_path("Enter folder path")
+            console.print("[red]Please enter 1 or 2.[/red]")
+
     def show_message(self, msg: str) -> None:
         console.print(msg)
 

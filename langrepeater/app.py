@@ -56,7 +56,12 @@ class AppController:
                 return True
 
         # new file selection
-        return self._select_files(".")
+        if sessions:
+            prev_dir = str(Path(sessions[0].media_path).parent)
+            start_dir = self.ui.ask_folder(prev_dir)
+        else:
+            start_dir = "."
+        return self._select_files(start_dir)
 
     def _select_files(self, directory: str) -> bool:
         # select media file

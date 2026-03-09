@@ -21,7 +21,7 @@ class StatsStore:
             return {}
 
     def _save_raw(self, data: dict) -> None:
-        self.path.write_text(yaml.dump(data, allow_unicode=True), encoding="utf-8")
+        self.path.write_text(yaml.dump(data, allow_unicode=True, width=float("inf")), encoding="utf-8")
 
     def load(self, media_path: str) -> SessionStats:
         raw = self._load_raw()

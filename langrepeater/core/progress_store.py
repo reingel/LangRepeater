@@ -39,7 +39,7 @@ class ProgressStore:
                 for s in sessions
             ]
         }
-        self.path.write_text(yaml.dump(data, allow_unicode=True), encoding="utf-8")
+        self.path.write_text(yaml.dump(data, allow_unicode=True, width=float("inf")), encoding="utf-8")
 
     def upsert(self, session: Session) -> None:
         sessions = self.load()
