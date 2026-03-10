@@ -148,6 +148,8 @@ class AppController:
                     self._handle_shift_end(-0.1)
                 elif action == Action.SHIFT_END_LATER:
                     self._handle_shift_end(0.1)
+                elif action == Action.PRINT_STATS:
+                    self._handle_print_stats()
         finally:
             termios.tcflush(fd, termios.TCIFLUSH)
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -206,6 +208,26 @@ class AppController:
         sub.end = round(new_end, 1)
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
+
+    def _handle_print_stats(self) -> None:
+        if not self.subtitles:
+            return
+        stats = self.stats_store.load(self.media_path)
+        # build index → subtitle map
+        sub_map = {sub.index: sub for sub in self.subtitles}
+        # TOP10 by play count
+        top10 = sorted(
+            stats.subtitle_play_counts.items(),
+            key=lambda x: x[1],
+            reverse=True,
+        )[:10]
+        # total study time = sum of duration × play count
+        total_seconds = sum(
+            (sub_map[idx].end - sub_map[idx].start) * count
+            for idx, count in stats.subtitle_play_counts.items()
+            if idx in sub_map
+        )
+        self.ui.show_learning_stats(top10, sub_map, total_seconds)
 
     def _refresh_display(self) -> None:
         self.ui.show_subtitles(self.subtitles, self.current_index)

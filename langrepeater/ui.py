@@ -15,7 +15,8 @@ class RichUI:
             "[bold cyan]LangRepeater[/bold cyan]\n"
             "Audio segment repeater for language learning\n\n"
             "[dim]Space/S: play  |  D/→: next  |  A/←: prev  |  Q/ESC: quit[/dim]\n"
-            "[dim]Z: start -0.1s  |  X: start +0.1s  |  N: end -0.1s  |  M: end +0.1s[/dim]",
+            "[dim]Z: start -0.1s  |  X: start +0.1s  |  N: end -0.1s  |  M: end +0.1s[/dim]\n"
+            "[dim]P: learning stats[/dim]",
             expand=False,
         ))
 
@@ -102,6 +103,24 @@ class RichUI:
 
     def ask_path(self, prompt: str) -> str:
         return console.input(f"{prompt}: ").strip()
+
+    def show_learning_stats(
+        self,
+        top10: list[tuple[int, int]],
+        sub_map: dict[int, Subtitle],
+        total_seconds: float,
+    ) -> None:
+        console.print("\n[bold cyan]── Learning Statistics ──[/bold cyan]")
+        for rank, (idx, count) in enumerate(top10, 1):
+            text = sub_map[idx].text if idx in sub_map else f"(subtitle {idx})"
+            console.print(f"  [cyan]{rank:>2}[/cyan]. [bold]{count}x[/bold]  {text}")
+        hours, rem = divmod(int(total_seconds), 3600)
+        minutes, seconds = divmod(rem, 60)
+        if hours:
+            time_str = f"{hours}h {minutes}m {seconds}s"
+        else:
+            time_str = f"{minutes}m {seconds}s"
+        console.print(f"\n[dim]Total listening time: {time_str}[/dim]")
 
     def show_stats(self, total_play: int, subtitle_index: int, subtitle_play: int) -> None:
         console.print(
