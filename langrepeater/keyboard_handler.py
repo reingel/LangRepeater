@@ -13,6 +13,7 @@ class Action(Enum):
     SHIFT_START_LATER = auto()
     SHIFT_END_EARLIER = auto()
     SHIFT_END_LATER = auto()
+    PRINT_STATS = auto()
 
 
 _KEY_MAP: dict[str, Action] = {
@@ -24,6 +25,7 @@ _KEY_MAP: dict[str, Action] = {
     "x": Action.SHIFT_START_LATER,
     "n": Action.SHIFT_END_EARLIER,
     "m": Action.SHIFT_END_LATER,
+    "p": Action.PRINT_STATS,
 }
 
 
