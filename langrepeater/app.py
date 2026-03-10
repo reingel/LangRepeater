@@ -32,11 +32,13 @@ class AppController:
 
     def run(self) -> None:
         self.ui.show_welcome()
-
-        if not self._setup_session():
-            return
-
-        self._main_loop()
+        while True:
+            if not self._setup_session():
+                return
+            restart = self._main_loop()
+            if not restart:
+                return
+            self.ui.show_welcome()
 
     # ------------------------------------------------------------------
     # Session setup
@@ -116,7 +118,7 @@ class AppController:
     # Main loop
     # ------------------------------------------------------------------
 
-    def _main_loop(self) -> None:
+    def _main_loop(self) -> bool:  # True = HOME (restart), False = QUIT
         self.keyboard.start(lambda action: self.action_queue.put(action))
         self._refresh_display()
 
@@ -125,6 +127,7 @@ class AppController:
         try:
             tty.setcbreak(fd)  # disable echo while keeping Ctrl+C working
             running = True
+            restart = False
             while running:
                 try:
                     action = self.action_queue.get(timeout=0.1)
@@ -133,6 +136,10 @@ class AppController:
 
                 if action == Action.QUIT:
                     self._handle_quit()
+                    running = False
+                elif action == Action.HOME:
+                    self._handle_home()
+                    restart = True
                     running = False
                 elif action == Action.PLAY:
                     self._handle_play()
@@ -154,6 +161,7 @@ class AppController:
             termios.tcflush(fd, termios.TCIFLUSH)
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
             self.keyboard.stop()
+        return restart
 
     def _handle_play(self) -> None:
         self._play_current()
@@ -169,6 +177,15 @@ class AppController:
             self.current_index -= 1
         self._refresh_display()
         self._play_current()
+
+    def _handle_home(self) -> None:
+        if self.player:
+            self.player.stop()
+        self.progress_store.upsert(Session(
+            media_path=self.media_path,
+            srt_path=self.srt_path,
+            current_index=self.current_index,
+        ))
 
     def _handle_quit(self) -> None:
         if self.player:

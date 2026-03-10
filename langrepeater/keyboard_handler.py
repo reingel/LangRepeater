@@ -14,6 +14,7 @@ class Action(Enum):
     SHIFT_END_EARLIER = auto()
     SHIFT_END_LATER = auto()
     PRINT_STATS = auto()
+    HOME = auto()
 
 
 _KEY_MAP: dict[str, Action] = {
@@ -26,6 +27,7 @@ _KEY_MAP: dict[str, Action] = {
     "n": Action.SHIFT_END_EARLIER,
     "m": Action.SHIFT_END_LATER,
     "p": Action.PRINT_STATS,
+    "h": Action.HOME,
 }
 
 
@@ -61,7 +63,7 @@ def _resolve(key: keyboard.Key | keyboard.KeyCode | None) -> Action | None:
     if key == keyboard.Key.left:
         return Action.PREV
     if key == keyboard.Key.esc:
-        return Action.QUIT
+        return Action.HOME
 
     # character keys
     if hasattr(key, "char") and key.char is not None:

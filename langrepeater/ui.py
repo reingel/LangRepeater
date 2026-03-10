@@ -14,7 +14,7 @@ class RichUI:
         console.print(Panel(
             "[bold cyan]LangRepeater[/bold cyan]\n"
             "Audio segment repeater for language learning\n\n"
-            "[dim]Space/S: play  |  D/→: next  |  A/←: prev  |  Q/ESC: quit[/dim]\n"
+            "[dim]Space/S: play  |  D/→: next  |  A/←: prev  |  Q: quit  |  ESC/H: home[/dim]\n"
             "[dim]Z: start -0.1s  |  X: start +0.1s  |  N: end -0.1s  |  M: end +0.1s[/dim]\n"
             "[dim]P: learning stats[/dim]",
             expand=False,
