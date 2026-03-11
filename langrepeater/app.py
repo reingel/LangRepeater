@@ -1,4 +1,3 @@
-import queue
 import sys
 import termios
 import tty
@@ -10,7 +9,7 @@ from .core.models import Session, Subtitle
 from .core.progress_store import ProgressStore
 from .core.stats_store import StatsStore
 from .core.srt_parser import SRTParser
-from .keyboard_handler import Action, KeyboardHandler
+from .keyboard_handler import Action, read_action
 from .ui import RichUI
 
 
@@ -21,9 +20,6 @@ class AppController:
         self.stats_store = StatsStore()
         self.file_finder = FileFinder()
         self.srt_parser = SRTParser()
-        self.keyboard = KeyboardHandler()
-        self.action_queue: queue.Queue[Action] = queue.Queue()
-
         self.player: AudioPlayer | None = None
         self.subtitles: list[Subtitle] = []
         self.current_index: int = 0
@@ -45,25 +41,77 @@ class AppController:
     # ------------------------------------------------------------------
 
     def _setup_session(self) -> bool:
-        sessions = self.progress_store.load()
-        if sessions:
-            chosen = self.ui.show_progress_list(sessions)
-            if chosen is not None:
-                session = sessions[chosen]
+        while True:
+            sessions = self.progress_store.load()
+            choice = self.ui.show_home_menu(has_sessions=bool(sessions))
+            if choice == "quit":
+                return False
+            if choice == "resume":
+                idx = self.ui.ask_resume_session(sessions)
+                if idx is None:
+                    continue
+                session = sessions[idx]
                 self.media_path = session.media_path
                 self.srt_path = session.srt_path
                 self.current_index = session.current_index
                 self._load_subtitles()
                 self._init_player()
                 return True
+            if choice == "url":
+                if self._load_from_url():
+                    return True
+                continue
+            if choice == "delete":
+                self._handle_delete_session(sessions)
+                continue
+            # "new" = new local file
+            if sessions:
+                prev_dir = str(Path(sessions[0].media_path).parent)
+                start_dir = self.ui.ask_folder(prev_dir)
+                if start_dir is None:
+                    continue
+            else:
+                start_dir = "."
+            if self._select_files(start_dir):
+                return True
+            continue
 
-        # new file selection
-        if sessions:
-            prev_dir = str(Path(sessions[0].media_path).parent)
-            start_dir = self.ui.ask_folder(prev_dir)
-        else:
-            start_dir = "."
-        return self._select_files(start_dir)
+    def _handle_delete_session(self, sessions: list) -> None:
+        idx = self.ui.ask_delete_session(sessions)
+        if idx is None:
+            return
+        if self.ui.confirm_delete(sessions[idx]):
+            self.progress_store.delete(idx)
+            self.ui.show_message("[dim]Session deleted.[/dim]")
+
+    def _load_from_url(self) -> bool:
+        from .core import url_loader
+
+        url = self.ui.ask_path("Enter URL (or C to cancel)")
+        if not url or url.strip().lower() == "c":
+            return False
+
+        output_dir = str(Path.home() / "Downloads" / "LangRepeater")
+        self.ui.show_message("[dim]Downloading...[/dim]")
+        try:
+            audio_path = url_loader.download(url, output_dir)
+        except Exception as e:
+            self.ui.show_message(f"[red]Download failed: {e}[/red]")
+            return False
+
+        self.ui.show_message("[dim]Transcribing with Whisper...[/dim]")
+        try:
+            srt_path = url_loader.transcribe(audio_path)
+        except Exception as e:
+            self.ui.show_message(f"[red]Transcription failed: {e}[/red]")
+            return False
+
+        self.media_path = audio_path
+        self.srt_path = srt_path
+        self.current_index = 0
+        self._load_subtitles()
+        self._init_player()
+        return True
 
     def _select_files(self, directory: str) -> bool:
         # select media file
@@ -82,26 +130,22 @@ class AppController:
                 return False
 
         idx = self.ui.show_file_list(media_files, "Select a media file")
+        if idx is None:
+            return False
         self.media_path = media_files[idx]
 
-        # select srt file
-        srt_dir = directory
-        while True:
-            srt_files = self.file_finder.find_srt(srt_dir)
-            if srt_files:
-                break
-            if not Path(srt_dir).exists():
-                self.ui.show_message(f"[red]Path does not exist: {srt_dir}[/red]")
-            else:
-                self.ui.show_message(
-                    f"[yellow]No srt files found in: {srt_dir}[/yellow]"
-                )
-            srt_dir = self.ui.ask_path("Enter path to srt files")
-            if not srt_dir:
+        # select srt file: use same-name srt if exists, else transcribe
+        srt_candidate = str(Path(self.media_path).with_suffix(".srt"))
+        if Path(srt_candidate).exists():
+            self.srt_path = srt_candidate
+        else:
+            self.ui.show_message("[dim]No matching srt file found. Transcribing with Whisper...[/dim]")
+            from .core import url_loader
+            try:
+                self.srt_path = url_loader.transcribe(self.media_path)
+            except Exception as e:
+                self.ui.show_message(f"[red]Transcription failed: {e}[/red]")
                 return False
-
-        idx = self.ui.show_file_list(srt_files, "Select a subtitle file")
-        self.srt_path = srt_files[idx]
 
         self.current_index = 0
         self._load_subtitles()
@@ -119,7 +163,6 @@ class AppController:
     # ------------------------------------------------------------------
 
     def _main_loop(self) -> bool:  # True = HOME (restart), False = QUIT
-        self.keyboard.start(lambda action: self.action_queue.put(action))
         self._refresh_display()
 
         fd = sys.stdin.fileno()
@@ -129,9 +172,8 @@ class AppController:
             running = True
             restart = False
             while running:
-                try:
-                    action = self.action_queue.get(timeout=0.1)
-                except queue.Empty:
+                action = read_action(fd, timeout=0.1)
+                if action is None:
                     continue
 
                 if action == Action.QUIT:
@@ -160,7 +202,6 @@ class AppController:
         finally:
             termios.tcflush(fd, termios.TCIFLUSH)
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            self.keyboard.stop()
         return restart
 
     def _handle_play(self) -> None:

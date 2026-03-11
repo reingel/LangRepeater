@@ -41,6 +41,12 @@ class ProgressStore:
         }
         self.path.write_text(yaml.dump(data, allow_unicode=True, width=float("inf")), encoding="utf-8")
 
+    def delete(self, index: int) -> None:
+        sessions = self.load()
+        if 0 <= index < len(sessions):
+            sessions.pop(index)
+            self.save(sessions)
+
     def upsert(self, session: Session) -> None:
         sessions = self.load()
         for i, s in enumerate(sessions):

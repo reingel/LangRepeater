@@ -20,12 +20,14 @@ class RichUI:
             expand=False,
         ))
 
-    def show_file_list(self, files: list[str], prompt: str) -> int:
+    def show_file_list(self, files: list[str], prompt: str) -> int | None:
         console.print(f"\n[bold]{prompt}[/bold]")
         for i, f in enumerate(files, 1):
             console.print(f"  [cyan]{i}[/cyan]. {Path(f).name}")
         while True:
-            raw = console.input(f"\nEnter number (1-{len(files)}): ").strip()
+            raw = console.input(f"\nEnter number (1-{len(files)}) or C to cancel: ").strip()
+            if raw.lower() == "c":
+                return None
             if raw.isdigit():
                 n = int(raw)
                 if 1 <= n <= len(files):
@@ -68,30 +70,91 @@ class RichUI:
             f"\n[dim]Progress: {current_index + 1}/{n} ({progress_pct:.1f}%)[/dim]"
         )
 
-    def show_progress_list(self, sessions: list[Session]) -> int | None:
-        console.print("\n[bold]Previous sessions found:[/bold]")
+    def show_home_menu(self, has_sessions: bool) -> str:
+        """Show home menu. Returns: 'resume'|'new'|'url'|'delete'|'quit'."""
+        console.print()
+        n = 1
+        if has_sessions:
+            console.print(f"  [cyan]{n}[/cyan]. Continue previous session")
+            n += 1
+        console.print(f"  [cyan]{n}[/cyan]. Open new file")
+        n += 1
+        console.print(f"  [cyan]{n}[/cyan]. Enter URL")
+        n += 1
+        if has_sessions:
+            console.print(f"  [cyan]{n}[/cyan]. Delete a session")
+            n += 1
+        total = n - 1
+        console.print(f"\n  [dim]Q: Quit[/dim]")
+        while True:
+            raw = console.input(f"\nEnter number (1-{total}) or Q to quit: ").strip()
+            if raw.lower() == "q":
+                return "quit"
+            if raw.isdigit():
+                val = int(raw)
+                idx = 1
+                if has_sessions:
+                    if val == idx:
+                        return "resume"
+                    idx += 1
+                if val == idx:
+                    return "new"
+                idx += 1
+                if val == idx:
+                    return "url"
+                idx += 1
+                if has_sessions and val == idx:
+                    return "delete"
+            console.print("[red]Please enter a valid number.[/red]")
+
+    def ask_resume_session(self, sessions: list[Session]) -> int | None:
+        """Show session list for resuming. Returns index or None to cancel."""
+        console.print("\n[bold]Select session to resume:[/bold]")
         for i, s in enumerate(sessions, 1):
             console.print(
                 f"  [cyan]{i}[/cyan]. {Path(s.media_path).name}  "
                 f"[dim](segment {s.current_index + 1})[/dim]"
             )
-        console.print(f"  [cyan]{len(sessions) + 1}[/cyan]. Open new file")
         while True:
-            raw = console.input(f"\nEnter number (1-{len(sessions) + 1}): ").strip()
+            raw = console.input(f"\nEnter number (1-{len(sessions)}) or C to cancel: ").strip()
+            if raw.lower() == "c":
+                return None
             if raw.isdigit():
                 n = int(raw)
                 if 1 <= n <= len(sessions):
                     return n - 1
-                if n == len(sessions) + 1:
-                    return None
             console.print("[red]Please enter a valid number.[/red]")
 
-    def ask_folder(self, previous_dir: str) -> str:
+    def ask_delete_session(self, sessions: list[Session]) -> int | None:
+        console.print("\n[bold]Select session to delete:[/bold]")
+        for i, s in enumerate(sessions, 1):
+            console.print(
+                f"  [cyan]{i}[/cyan]. {Path(s.media_path).name}  "
+                f"[dim](segment {s.current_index + 1})[/dim]"
+            )
+        while True:
+            raw = console.input(f"\nEnter number (1-{len(sessions)}) or C to cancel: ").strip()
+            if raw.lower() == "c":
+                return None
+            if raw.isdigit():
+                n = int(raw)
+                if 1 <= n <= len(sessions):
+                    return n - 1
+            console.print("[red]Please enter a valid number.[/red]")
+
+    def confirm_delete(self, session: Session) -> bool:
+        name = Path(session.media_path).name
+        raw = console.input(f"\nDelete [bold]{name}[/bold]? (y/N): ").strip().lower()
+        return raw == "y"
+
+    def ask_folder(self, previous_dir: str) -> str | None:
         console.print("\n[bold]Select folder:[/bold]")
         console.print(f"  [cyan]1[/cyan]. Same folder: [dim]{previous_dir}[/dim]")
         console.print(f"  [cyan]2[/cyan]. Different folder")
         while True:
-            raw = console.input("\nEnter number (1-2): ").strip()
+            raw = console.input("\nEnter number (1-2) or C to cancel: ").strip()
+            if raw.lower() == "c":
+                return None
             if raw == "1":
                 return previous_dir
             if raw == "2":

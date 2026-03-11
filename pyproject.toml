@@ -10,11 +10,12 @@ dependencies = [
     "pygame>=2.5",
     "python-vlc>=3.0",
     "srt>=3.5",
-    "pynput>=1.7",
     "rich>=13.0",
     "pyyaml>=6.0",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.28",
+    "yt-dlp>=2024.1",
+    "openai-whisper>=20231117",
 ]
 
 [project.optional-dependencies]
