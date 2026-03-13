@@ -49,10 +49,6 @@ class ProgressStore:
 
     def upsert(self, session: Session) -> None:
         sessions = self.load()
-        for i, s in enumerate(sessions):
-            if s.media_path == session.media_path:
-                sessions[i] = session
-                self.save(sessions)
-                return
-        sessions.append(session)
+        sessions = [s for s in sessions if s.media_path != session.media_path]
+        sessions.insert(0, session)  # most recently used at front
         self.save(sessions)

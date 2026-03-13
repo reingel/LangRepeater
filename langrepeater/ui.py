@@ -10,15 +10,22 @@ console = Console()
 
 
 class RichUI:
+    _HELP_TEXT = (
+        "[dim]Space: play/pause  |  S: replay  |  D/→: next  |  A/←: prev  |  Q: quit[/dim]\n"
+        "[dim]Z: start -0.1s  |  X: start +0.1s  |  N: end -0.1s  |  M: end +0.1s[/dim]\n"
+        "[dim]U: merge with next  |  I: split  |  P: stats  |  H: help  |  ESC: home[/dim]"
+    )
+
     def show_welcome(self) -> None:
         console.print(Panel(
             "[bold cyan]LangRepeater[/bold cyan]\n"
             "Audio segment repeater for language learning\n\n"
-            "[dim]Space/S: play  |  D/→: next  |  A/←: prev  |  Q: quit  |  ESC/H: home[/dim]\n"
-            "[dim]Z: start -0.1s  |  X: start +0.1s  |  N: end -0.1s  |  M: end +0.1s[/dim]\n"
-            "[dim]P: learning stats[/dim]",
+            + self._HELP_TEXT,
             expand=False,
         ))
+
+    def show_help(self) -> None:
+        console.print(Panel(self._HELP_TEXT, title="Key Bindings", expand=False))
 
     def show_file_list(self, files: list[str], prompt: str) -> int | None:
         console.print(f"\n[bold]{prompt}[/bold]")
@@ -77,7 +84,7 @@ class RichUI:
         if has_sessions:
             console.print(f"  [cyan]{n}[/cyan]. Continue previous session")
             n += 1
-        console.print(f"  [cyan]{n}[/cyan]. Open new file")
+        console.print(f"  [cyan]{n}[/cyan]. Open a new file")
         n += 1
         console.print(f"  [cyan]{n}[/cyan]. Enter URL")
         n += 1
@@ -111,12 +118,15 @@ class RichUI:
         """Show session list for resuming. Returns index or None to cancel."""
         console.print("\n[bold]Select session to resume:[/bold]")
         for i, s in enumerate(sessions, 1):
+            marker = "[yellow]▶[/yellow] " if i == 1 else "  "
             console.print(
-                f"  [cyan]{i}[/cyan]. {Path(s.media_path).name}  "
+                f"{marker}[cyan]{i}[/cyan]. {Path(s.media_path).name}  "
                 f"[dim](segment {s.current_index + 1})[/dim]"
             )
         while True:
             raw = console.input(f"\nEnter number (1-{len(sessions)}) or C to cancel: ").strip()
+            if raw == "":
+                return 0
             if raw.lower() == "c":
                 return None
             if raw.isdigit():
@@ -160,6 +170,56 @@ class RichUI:
             if raw == "2":
                 return self.ask_path("Enter folder path")
             console.print("[red]Please enter 1 or 2.[/red]")
+
+    def ask_split_point(self, subtitle) -> int | None:
+        """Show split point candidates. Returns char position or None to cancel."""
+        import re
+        text = subtitle.text
+        # Find candidate split positions
+        positions: list[int] = []
+        for m in re.finditer(r'\.\s+(?=\S)', text):  # mid-sentence period
+            pos = m.end()
+            if 0 < pos < len(text):
+                positions.append(pos)
+        for m in re.finditer(r',\s*', text):
+            pos = m.end()
+            if 0 < pos < len(text) and pos not in positions:
+                positions.append(pos)
+        for m in re.finditer(r'\b(and|or)\b', text, re.IGNORECASE):
+            pos = m.start()
+            if 0 < pos < len(text) and pos not in positions:
+                positions.append(pos)
+        for m in re.finditer(r';\s*', text):
+            pos = m.end()
+            if 0 < pos < len(text) and pos not in positions:
+                positions.append(pos)
+        # Japanese punctuation: 。！？、（split after）; 「」 splits before 「
+        for m in re.finditer(r'[。！？]\s*', text):
+            pos = m.end()
+            if 0 < pos < len(text) and pos not in positions:
+                positions.append(pos)
+        for m in re.finditer(r'、\s*', text):
+            pos = m.end()
+            if 0 < pos < len(text) and pos not in positions:
+                positions.append(pos)
+        positions = sorted(set(positions))
+        if not positions:
+            console.print("[yellow]No split points found.[/yellow]")
+            return None
+        console.print("\n[bold]Select split point:[/bold]")
+        for i, pos in enumerate(positions, 1):
+            before = text[:pos].rstrip()
+            after = text[pos:].lstrip()
+            console.print(f"  [cyan]{i}[/cyan]. {before} [bold red]|[/bold red] {after}")
+        while True:
+            raw = console.input(f"\nEnter number (1-{len(positions)}) or C to cancel: ").strip()
+            if raw.lower() == "c":
+                return None
+            if raw.isdigit():
+                n = int(raw)
+                if 1 <= n <= len(positions):
+                    return positions[n - 1]
+            console.print("[red]Please enter a valid number.[/red]")
 
     def show_message(self, msg: str) -> None:
         console.print(msg)

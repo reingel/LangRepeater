@@ -13,6 +13,14 @@ from .keyboard_handler import Action, read_action
 from .ui import RichUI
 
 
+def _is_cjk_text(text: str) -> bool:
+    """Return True if text contains CJK (Chinese/Japanese/Korean) characters."""
+    return any(
+        0x3000 <= ord(c) <= 0x9FFF or 0xF900 <= ord(c) <= 0xFAFF
+        for c in text
+    )
+
+
 class AppController:
     def __init__(self) -> None:
         self.ui = RichUI()
@@ -25,6 +33,9 @@ class AppController:
         self.current_index: int = 0
         self.media_path: str = ""
         self.srt_path: str = ""
+        self._paused: bool = False
+        self._fd: int = -1
+        self._old_settings: list = []
 
     def run(self) -> None:
         self.ui.show_welcome()
@@ -81,6 +92,7 @@ class AppController:
         if idx is None:
             return
         if self.ui.confirm_delete(sessions[idx]):
+            self.stats_store.delete(sessions[idx].media_path)
             self.progress_store.delete(idx)
             self.ui.show_message("[dim]Session deleted.[/dim]")
 
@@ -167,6 +179,8 @@ class AppController:
 
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
+        self._fd = fd
+        self._old_settings = old_settings
         try:
             tty.setcbreak(fd)  # disable echo while keeping Ctrl+C working
             running = True
@@ -185,6 +199,8 @@ class AppController:
                     running = False
                 elif action == Action.PLAY:
                     self._handle_play()
+                elif action == Action.RESTART:
+                    self._handle_restart()
                 elif action == Action.NEXT:
                     self._handle_next()
                 elif action == Action.PREV:
@@ -197,6 +213,12 @@ class AppController:
                     self._handle_shift_end(-0.1)
                 elif action == Action.SHIFT_END_LATER:
                     self._handle_shift_end(0.1)
+                elif action == Action.HELP:
+                    self.ui.show_help()
+                elif action == Action.MERGE:
+                    self._handle_merge()
+                elif action == Action.SPLIT:
+                    self._handle_split()
                 elif action == Action.PRINT_STATS:
                     self._handle_print_stats()
         finally:
@@ -205,6 +227,20 @@ class AppController:
         return restart
 
     def _handle_play(self) -> None:
+        # Space: toggle play/pause; if stopped, start playing
+        if self.player is None:
+            return
+        if self.player.is_playing():
+            self.player.toggle_pause()
+            self._paused = True
+        elif self._paused:
+            self.player.toggle_pause()
+            self._paused = False
+        else:
+            self._play_current()
+
+    def _handle_restart(self) -> None:
+        # S: always restart segment from beginning
         self._play_current()
 
     def _handle_next(self) -> None:
@@ -241,9 +277,14 @@ class AppController:
     def _play_current(self) -> None:
         if not self.subtitles or self.player is None:
             return
+        self._paused = False
         sub = self.subtitles[self.current_index]
-        self.player.play_segment(self.media_path, sub.start, sub.end)
-        self.stats_store.increment_play(self.media_path, sub.index)
+        media_path = self.media_path
+        sub_index = sub.index
+        self.player.play_segment(
+            self.media_path, sub.start, sub.end,
+            on_complete=lambda: self.stats_store.increment_play(media_path, sub_index),
+        )
 
     def _handle_shift_start(self, delta: float) -> None:
         if not self.subtitles:
@@ -255,6 +296,7 @@ class AppController:
         sub.start = round(new_start, 1)
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
+        self._play_current()
 
     def _handle_shift_end(self, delta: float) -> None:
         if not self.subtitles:
@@ -266,6 +308,62 @@ class AppController:
         sub.end = round(new_end, 1)
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
+        self._play_current()
+
+    def _handle_merge(self) -> None:
+        if not self.subtitles:
+            return
+        if self.current_index >= len(self.subtitles) - 1:
+            return  # no next segment
+        cur = self.subtitles[self.current_index]
+        nxt = self.subtitles[self.current_index + 1]
+        cur_index = cur.index
+        nxt_index = nxt.index
+        cur.end = nxt.end
+        sep = "" if _is_cjk_text(cur.text.rstrip() or nxt.text.lstrip()) else " "
+        cur.text = cur.text.rstrip() + sep + nxt.text.lstrip()
+        self.subtitles.pop(self.current_index + 1)
+        self._reindex_subtitles()
+        self.stats_store.on_merge(self.media_path, cur_index, nxt_index, len(self.subtitles))
+        self.srt_parser.save(self.srt_path, self.subtitles)
+        self._refresh_display()
+        self._play_current()
+
+    def _handle_split(self) -> None:
+        if not self.subtitles:
+            return
+        sub = self.subtitles[self.current_index]
+        sub_index = sub.index
+        # temporarily restore terminal for interactive input
+        termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
+        try:
+            split_pos = self.ui.ask_split_point(sub)
+        finally:
+            tty.setcbreak(self._fd)
+        if split_pos is None:
+            return
+        text_a = sub.text[:split_pos].rstrip()
+        text_b = sub.text[split_pos:].lstrip()
+        words_a = len(text_a.split())
+        words_total = len(sub.text.split())
+        if words_total > 1:
+            ratio = words_a / words_total
+        else:
+            ratio = len(text_a) / len(sub.text) if sub.text else 0.5
+        split_time = round(sub.start + (sub.end - sub.start) * ratio, 3)
+        from .core.models import Subtitle
+        sub_a = Subtitle(index=0, start=sub.start, end=split_time, text=text_a)
+        sub_b = Subtitle(index=0, start=split_time, end=sub.end, text=text_b)
+        self.subtitles[self.current_index:self.current_index + 1] = [sub_a, sub_b]
+        self._reindex_subtitles()
+        self.stats_store.on_split(self.media_path, sub_index, len(self.subtitles))
+        self.srt_parser.save(self.srt_path, self.subtitles)
+        self._refresh_display()
+        self._play_current()
+
+    def _reindex_subtitles(self) -> None:
+        for i, sub in enumerate(self.subtitles):
+            sub.index = i + 1
 
     def _handle_print_stats(self) -> None:
         if not self.subtitles:

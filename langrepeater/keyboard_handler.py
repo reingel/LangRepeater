@@ -5,6 +5,7 @@ from enum import Enum, auto
 
 class Action(Enum):
     PLAY = auto()
+    RESTART = auto()
     NEXT = auto()
     PREV = auto()
     QUIT = auto()
@@ -12,13 +13,16 @@ class Action(Enum):
     SHIFT_START_LATER = auto()
     SHIFT_END_EARLIER = auto()
     SHIFT_END_LATER = auto()
+    MERGE = auto()
+    SPLIT = auto()
+    HELP = auto()
     PRINT_STATS = auto()
     HOME = auto()
 
 
 _CHAR_MAP: dict[str, Action] = {
     " ": Action.PLAY,
-    "s": Action.PLAY,
+    "s": Action.RESTART,
     "d": Action.NEXT,
     "a": Action.PREV,
     "q": Action.QUIT,
@@ -26,8 +30,10 @@ _CHAR_MAP: dict[str, Action] = {
     "x": Action.SHIFT_START_LATER,
     "n": Action.SHIFT_END_EARLIER,
     "m": Action.SHIFT_END_LATER,
+    "u": Action.MERGE,
+    "i": Action.SPLIT,
+    "h": Action.HELP,
     "p": Action.PRINT_STATS,
-    "h": Action.HOME,
 }
 
 

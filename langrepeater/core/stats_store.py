@@ -42,10 +42,60 @@ class StatsStore:
         }
         self._save_raw(raw)
 
+    def delete(self, media_path: str) -> None:
+        raw = self._load_raw()
+        if media_path in raw:
+            del raw[media_path]
+            self._save_raw(raw)
+
     def increment_play(self, media_path: str, subtitle_index: int) -> None:
         stats = self.load(media_path)
         stats.total_play_count += 1
         stats.subtitle_play_counts[subtitle_index] = (
             stats.subtitle_play_counts.get(subtitle_index, 0) + 1
         )
+        self.save(stats)
+
+    def on_merge(self, media_path: str, cur_index: int, nxt_index: int, new_total: int) -> None:
+        """Update stats after merging two adjacent subtitles (1-based indices)."""
+        stats = self.load(media_path)
+        counts = stats.subtitle_play_counts
+        merged = counts.get(cur_index, 0) + counts.get(nxt_index, 0)
+        new_counts: dict[int, int] = {}
+        for idx, count in counts.items():
+            if idx < cur_index:
+                new_counts[idx] = count
+            elif idx == cur_index:
+                if merged:
+                    new_counts[idx] = merged
+            elif idx == nxt_index:
+                pass  # absorbed into cur
+            else:
+                new_counts[idx - 1] = count
+        new_counts = {k: v for k, v in new_counts.items() if v > 0 and k <= new_total}
+        stats.subtitle_play_counts = new_counts
+        stats.total_play_count = sum(new_counts.values())
+        self.save(stats)
+
+    def on_split(self, media_path: str, sub_index: int, new_total: int) -> None:
+        """Update stats after splitting a subtitle (1-based index)."""
+        stats = self.load(media_path)
+        counts = stats.subtitle_play_counts
+        original = counts.get(sub_index, 0)
+        front = (original + 1) // 2
+        back = original // 2
+        new_counts: dict[int, int] = {}
+        for idx, count in counts.items():
+            if idx < sub_index:
+                new_counts[idx] = count
+            elif idx == sub_index:
+                if front:
+                    new_counts[idx] = front
+            else:
+                new_counts[idx + 1] = count
+        if back:
+            new_counts[sub_index + 1] = back
+        new_counts = {k: v for k, v in new_counts.items() if v > 0 and k <= new_total}
+        stats.subtitle_play_counts = new_counts
+        stats.total_play_count = sum(new_counts.values())
         self.save(stats)
