@@ -13,7 +13,8 @@ class RichUI:
     _HELP_TEXT = (
         "[dim]Space: play/pause  |  S: replay  |  D/→: next  |  A/←: prev  |  Q: quit[/dim]\n"
         "[dim]Z: start -0.1s  |  X: start +0.1s  |  N: end -0.1s  |  M: end +0.1s[/dim]\n"
-        "[dim]U: merge with next  |  I: split  |  P: stats  |  H: help  |  ESC: home[/dim]"
+        "[dim]U: merge with next  |  I: split  |  P: stats  |  ]: next page  |  [: prev page[/dim]\n"
+        "[dim]H: help  |  ESC: home[/dim]"
     )
 
     def show_welcome(self) -> None:
@@ -229,21 +230,24 @@ class RichUI:
 
     def show_learning_stats(
         self,
-        top10: list[tuple[int, int]],
+        ranked: list[tuple[int, int]],
         sub_map: dict[int, Subtitle],
         total_seconds: float,
+        page: int,
     ) -> None:
+        page_size = 10
+        total = len(ranked)
+        start = page * page_size
+        end = min(start + page_size, total)
+        entries = ranked[start:end]
         console.print("\n[bold cyan]── Learning Statistics ──[/bold cyan]")
-        for rank, (idx, count) in enumerate(top10, 1):
+        for rank, (idx, count) in enumerate(entries, start + 1):
             text = sub_map[idx].text if idx in sub_map else f"(subtitle {idx})"
-            console.print(f"  [cyan]{rank:>2}[/cyan]. [bold]{count}x[/bold]  {text}")
+            console.print(f"  [cyan]{rank:>2}[/cyan]. [bold]{count}x[/bold]  [dim]#{idx}[/dim]  {text}")
         hours, rem = divmod(int(total_seconds), 3600)
         minutes, seconds = divmod(rem, 60)
-        if hours:
-            time_str = f"{hours}h {minutes}m {seconds}s"
-        else:
-            time_str = f"{minutes}m {seconds}s"
-        console.print(f"\n[dim]Total listening time: {time_str}[/dim]")
+        time_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
+        console.print(f"\n[dim]Total listening time: {time_str}  |  Page {page + 1}/{max(1, -(-total // page_size))}[/dim]")
 
     def show_stats(self, total_play: int, subtitle_index: int, subtitle_play: int) -> None:
         console.print(

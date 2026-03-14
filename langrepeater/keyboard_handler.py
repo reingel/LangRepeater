@@ -17,6 +17,8 @@ class Action(Enum):
     SPLIT = auto()
     HELP = auto()
     PRINT_STATS = auto()
+    STATS_NEXT = auto()
+    STATS_PREV = auto()
     HOME = auto()
 
 
@@ -34,6 +36,8 @@ _CHAR_MAP: dict[str, Action] = {
     "i": Action.SPLIT,
     "h": Action.HELP,
     "p": Action.PRINT_STATS,
+    "]": Action.STATS_NEXT,
+    "[": Action.STATS_PREV,
 }
 
 

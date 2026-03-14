@@ -36,6 +36,10 @@ class AppController:
         self._paused: bool = False
         self._fd: int = -1
         self._old_settings: list = []
+        self._stats_ranked: list[tuple[int, int]] = []
+        self._stats_sub_map: dict[int, object] = {}
+        self._stats_total_seconds: float = 0.0
+        self._stats_page: int = 0
 
     def run(self) -> None:
         self.ui.show_welcome()
@@ -221,6 +225,10 @@ class AppController:
                     self._handle_split()
                 elif action == Action.PRINT_STATS:
                     self._handle_print_stats()
+                elif action == Action.STATS_NEXT:
+                    self._handle_stats_page(1)
+                elif action == Action.STATS_PREV:
+                    self._handle_stats_page(-1)
         finally:
             termios.tcflush(fd, termios.TCIFLUSH)
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -378,21 +386,37 @@ class AppController:
         if not self.subtitles:
             return
         stats = self.stats_store.load(self.media_path)
-        # build index → subtitle map
-        sub_map = {sub.index: sub for sub in self.subtitles}
-        # TOP10 by play count
-        top10 = sorted(
+        self._stats_sub_map = {sub.index: sub for sub in self.subtitles}
+        self._stats_ranked = sorted(
             stats.subtitle_play_counts.items(),
             key=lambda x: x[1],
             reverse=True,
-        )[:10]
-        # total study time = sum of duration × play count
-        total_seconds = sum(
-            (sub_map[idx].end - sub_map[idx].start) * count
-            for idx, count in stats.subtitle_play_counts.items()
-            if idx in sub_map
         )
-        self.ui.show_learning_stats(top10, sub_map, total_seconds)
+        self._stats_total_seconds = sum(
+            (self._stats_sub_map[idx].end - self._stats_sub_map[idx].start) * count
+            for idx, count in stats.subtitle_play_counts.items()
+            if idx in self._stats_sub_map
+        )
+        self._stats_page = 0
+        self.ui.show_learning_stats(
+            self._stats_ranked, self._stats_sub_map, self._stats_total_seconds, self._stats_page
+        )
+
+    def _handle_stats_page(self, direction: int) -> None:
+        if not self._stats_ranked:
+            return
+        page_count = max(1, -(-len(self._stats_ranked) // 10))  # ceil division
+        new_page = self._stats_page + direction
+        if new_page < 0:
+            self.ui.show_message("[red]This is the first page.[/red]")
+            return
+        if new_page >= page_count:
+            self.ui.show_message("[red]This is the last page.[/red]")
+            return
+        self._stats_page = new_page
+        self.ui.show_learning_stats(
+            self._stats_ranked, self._stats_sub_map, self._stats_total_seconds, self._stats_page
+        )
 
     def _refresh_display(self) -> None:
         self.ui.show_subtitles(self.subtitles, self.current_index)
