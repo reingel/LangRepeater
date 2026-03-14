@@ -129,7 +129,7 @@ class VLCAudioPlayer(AudioPlayer):
             # resume: restart timer with remaining time
             self._player.pause()
             self._play_start_time = time.monotonic()
-            self._stop_timer = threading.Timer(self._remaining, self._player.stop)
+            self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
             self._stop_timer.daemon = True
             self._stop_timer.start()
         elif self._player.get_state() == vlc.State.Playing:

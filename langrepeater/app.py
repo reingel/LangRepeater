@@ -286,6 +286,13 @@ class AppController:
             on_complete=lambda: self.stats_store.increment_play(media_path, sub_index),
         )
 
+    def _play_preview(self, start: float, end: float) -> None:
+        """Play a time range without counting toward stats (for timestamp adjustments)."""
+        if self.player is None:
+            return
+        self._paused = False
+        self.player.play_segment(self.media_path, start, end, on_complete=None)
+
     def _handle_shift_start(self, delta: float) -> None:
         if not self.subtitles:
             return
@@ -296,7 +303,8 @@ class AppController:
         sub.start = round(new_start, 1)
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
-        self._play_current()
+        preview_end = min(sub.end, sub.start + 1.0)
+        self._play_preview(sub.start, preview_end)
 
     def _handle_shift_end(self, delta: float) -> None:
         if not self.subtitles:
@@ -308,7 +316,8 @@ class AppController:
         sub.end = round(new_end, 1)
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
-        self._play_current()
+        preview_start = max(sub.start, sub.end - 1.0)
+        self._play_preview(preview_start, sub.end)
 
     def _handle_merge(self) -> None:
         if not self.subtitles:
