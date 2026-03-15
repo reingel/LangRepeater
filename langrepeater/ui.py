@@ -13,22 +13,32 @@ class RichUI:
     _HELP_TEXT = (
         "[dim]Space: play/pause  |  S: replay  |  D/→: next  |  A/←: prev  |  Q: quit[/dim]\n"
         "[dim]Z: start -0.1s  |  X: start +0.1s  |  N: end -0.1s  |  M: end +0.1s[/dim]\n"
-        "[dim]U: merge with next  |  I: split  |  P: stats  |  ]: next page  |  [: prev page[/dim]\n"
-        "[dim]H: help  |  ESC: home[/dim]"
+        "[dim]U: merge with next  |  I: split  |  V: show/hide subtitle[/dim]\n"
+        "[dim]P: stats  |  ]: next page  |  [: prev page  |  ESC: home[/dim]"
+    )
+
+    def clear(self) -> None:
+        console.clear()
+
+    _HEADER_TEXT = (
+        "[bold cyan]LangRepeater[/bold cyan]\n"
+        "Audio segment repeater for language learning"
     )
 
     def show_welcome(self) -> None:
+        """Home screen header: clear screen, then program name + description."""
+        console.clear()
+        console.print(Panel(self._HEADER_TEXT, expand=False))
+
+    def show_study_header(self) -> None:
+        """Study screen header: program name + description + key bindings."""
         console.print(Panel(
-            "[bold cyan]LangRepeater[/bold cyan]\n"
-            "Audio segment repeater for language learning\n\n"
-            + self._HELP_TEXT,
+            self._HEADER_TEXT + "\n\n" + self._HELP_TEXT,
             expand=False,
         ))
 
-    def show_help(self) -> None:
-        console.print(Panel(self._HELP_TEXT, title="Key Bindings", expand=False))
-
     def show_file_list(self, files: list[str], prompt: str) -> int | None:
+        self.show_welcome()
         console.print(f"\n[bold]{prompt}[/bold]")
         for i, f in enumerate(files, 1):
             console.print(f"  [cyan]{i}[/cyan]. {Path(f).name}")
@@ -42,7 +52,15 @@ class RichUI:
                     return n - 1
             console.print("[red]Please enter a valid number.[/red]")
 
-    def show_subtitles(self, subtitles: list[Subtitle], current_index: int) -> None:
+    @staticmethod
+    def _mask_text(text: str) -> str:
+        """Return text with middle words replaced by ___, keeping first and last word."""
+        words = text.split()
+        if len(words) <= 2:
+            return text
+        return words[0] + " " + " ".join("_" * len(w) for w in words[1:-1]) + " " + words[-1]
+
+    def show_subtitles(self, subtitles: list[Subtitle], current_index: int, masked: bool = True) -> None:
         n = len(subtitles)
         # determine which 3 to display
         if n == 0:
@@ -62,15 +80,16 @@ class RichUI:
         console.print()
         for idx in indices:
             sub = subtitles[idx]
+            display_text = self._mask_text(sub.text) if masked else sub.text
             if idx == current_index:
                 ts = f"[{sub.start:.1f}s ~ {sub.end:.1f}s]"
                 line = Text()
                 line.append(f"{sub.index:>4}  ", style="dim")
-                line.append(sub.text, style="bold white")
+                line.append(display_text, style="bold white")
                 line.append(f"  {ts}", style="dim cyan")
                 console.print(line)
             else:
-                console.print(f"[dim]{sub.index:>4}  {sub.text}[/dim]")
+                console.print(f"[dim]{sub.index:>4}  {display_text}[/dim]")
 
         # show progress info
         progress_pct = (current_index + 1) / n * 100
@@ -117,6 +136,7 @@ class RichUI:
 
     def ask_resume_session(self, sessions: list[Session]) -> int | None:
         """Show session list for resuming. Returns index or None to cancel."""
+        self.show_welcome()
         console.print("\n[bold]Select session to resume:[/bold]")
         for i, s in enumerate(sessions, 1):
             marker = "[yellow]▶[/yellow] " if i == 1 else "  "
@@ -137,6 +157,7 @@ class RichUI:
             console.print("[red]Please enter a valid number.[/red]")
 
     def ask_delete_session(self, sessions: list[Session]) -> int | None:
+        self.show_welcome()
         console.print("\n[bold]Select session to delete:[/bold]")
         for i, s in enumerate(sessions, 1):
             console.print(
@@ -154,11 +175,13 @@ class RichUI:
             console.print("[red]Please enter a valid number.[/red]")
 
     def confirm_delete(self, session: Session) -> bool:
+        self.show_welcome()
         name = Path(session.media_path).name
         raw = console.input(f"\nDelete [bold]{name}[/bold]? (y/N): ").strip().lower()
         return raw == "y"
 
     def ask_folder(self, previous_dir: str) -> str | None:
+        self.show_welcome()
         console.print("\n[bold]Select folder:[/bold]")
         console.print(f"  [cyan]1[/cyan]. Same folder: [dim]{previous_dir}[/dim]")
         console.print(f"  [cyan]2[/cyan]. Different folder")
@@ -225,8 +248,9 @@ class RichUI:
     def show_message(self, msg: str) -> None:
         console.print(msg)
 
-    def ask_path(self, prompt: str) -> str:
-        return console.input(f"{prompt}: ").strip()
+    def ask_path(self, prompt: str) -> str | None:
+        val = console.input(f"{prompt} (or C to cancel): ").strip()
+        return None if val.lower() == "c" else val
 
     def show_learning_stats(
         self,

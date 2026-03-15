@@ -15,7 +15,7 @@ class Action(Enum):
     SHIFT_END_LATER = auto()
     MERGE = auto()
     SPLIT = auto()
-    HELP = auto()
+    TOGGLE_SUBTITLE = auto()
     PRINT_STATS = auto()
     STATS_NEXT = auto()
     STATS_PREV = auto()
@@ -34,7 +34,7 @@ _CHAR_MAP: dict[str, Action] = {
     "m": Action.SHIFT_END_LATER,
     "u": Action.MERGE,
     "i": Action.SPLIT,
-    "h": Action.HELP,
+    "v": Action.TOGGLE_SUBTITLE,
     "p": Action.PRINT_STATS,
     "]": Action.STATS_NEXT,
     "[": Action.STATS_PREV,

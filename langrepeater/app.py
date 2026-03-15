@@ -34,6 +34,7 @@ class AppController:
         self.media_path: str = ""
         self.srt_path: str = ""
         self._paused: bool = False
+        self._subtitle_masked: bool = True
         self._fd: int = -1
         self._old_settings: list = []
         self._stats_ranked: list[tuple[int, int]] = []
@@ -42,14 +43,12 @@ class AppController:
         self._stats_page: int = 0
 
     def run(self) -> None:
-        self.ui.show_welcome()
         while True:
             if not self._setup_session():
                 return
             restart = self._main_loop()
             if not restart:
                 return
-            self.ui.show_welcome()
 
     # ------------------------------------------------------------------
     # Session setup
@@ -57,6 +56,7 @@ class AppController:
 
     def _setup_session(self) -> bool:
         while True:
+            self.ui.show_welcome()
             sessions = self.progress_store.load()
             choice = self.ui.show_home_menu(has_sessions=bool(sessions))
             if choice == "quit":
@@ -103,7 +103,7 @@ class AppController:
     def _load_from_url(self) -> bool:
         from .core import url_loader
 
-        url = self.ui.ask_path("Enter URL (or C to cancel)")
+        url = self.ui.ask_path("Enter URL")
         if not url or url.strip().lower() == "c":
             return False
 
@@ -217,8 +217,9 @@ class AppController:
                     self._handle_shift_end(-0.1)
                 elif action == Action.SHIFT_END_LATER:
                     self._handle_shift_end(0.1)
-                elif action == Action.HELP:
-                    self.ui.show_help()
+                elif action == Action.TOGGLE_SUBTITLE:
+                    self._subtitle_masked = not self._subtitle_masked
+                    self._refresh_display()
                 elif action == Action.MERGE:
                     self._handle_merge()
                 elif action == Action.SPLIT:
@@ -398,6 +399,7 @@ class AppController:
             if idx in self._stats_sub_map
         )
         self._stats_page = 0
+        self.ui.clear()
         self.ui.show_learning_stats(
             self._stats_ranked, self._stats_sub_map, self._stats_total_seconds, self._stats_page
         )
@@ -414,9 +416,12 @@ class AppController:
             self.ui.show_message("[red]This is the last page.[/red]")
             return
         self._stats_page = new_page
+        self.ui.clear()
         self.ui.show_learning_stats(
             self._stats_ranked, self._stats_sub_map, self._stats_total_seconds, self._stats_page
         )
 
     def _refresh_display(self) -> None:
-        self.ui.show_subtitles(self.subtitles, self.current_index)
+        self.ui.clear()
+        self.ui.show_study_header()
+        self.ui.show_subtitles(self.subtitles, self.current_index, masked=self._subtitle_masked)
