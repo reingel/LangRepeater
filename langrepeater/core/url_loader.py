@@ -73,6 +73,23 @@ def transcribe(audio_path: str) -> str:
     return srt_path
 
 
+def extract_audio(mp4_path: str) -> str:
+    """Extract audio from mp4 to mp3 using ffmpeg.
+
+    Returns the path to the generated mp3 file (same folder, same stem).
+    """
+    import subprocess
+
+    mp3_path = str(Path(mp4_path).with_suffix(".mp3"))
+    result = subprocess.run(
+        ["ffmpeg", "-i", mp4_path, "-q:a", "0", "-map", "a", mp3_path, "-y"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed: {result.stderr}")
+    return mp3_path
+
+
 def _to_srt_time(seconds: float) -> str:
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)

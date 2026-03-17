@@ -180,6 +180,28 @@ class RichUI:
         raw = console.input(f"\nDelete [bold]{name}[/bold]? (y/N): ").strip().lower()
         return raw == "y"
 
+    @staticmethod
+    def _open_file_dialog(initial_dir: str = "~") -> str | None:
+        """Open native macOS file picker dialog for mp3/mp4 files via osascript."""
+        import os
+        import subprocess
+
+        abs_dir = os.path.abspath(os.path.expanduser(initial_dir))
+        script = (
+            f'POSIX path of (choose file with prompt "Select an mp3 or mp4 file" '
+            f'default location POSIX file "{abs_dir}")'
+        )
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True, text=True, timeout=120,
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
+            return None
+        except Exception:
+            return None
+
     def ask_folder(self, previous_dir: str) -> str | None:
         self.show_welcome()
         console.print("\n[bold]Select folder:[/bold]")
@@ -192,7 +214,12 @@ class RichUI:
             if raw == "1":
                 return previous_dir
             if raw == "2":
-                return self.ask_path("Enter folder path")
+                console.print("[dim]Opening file dialog...[/dim]")
+                path = self._open_file_dialog(previous_dir)
+                if path is None:
+                    console.print("[yellow]Dialog cancelled.[/yellow]")
+                    continue
+                return path
             console.print("[red]Please enter 1 or 2.[/red]")
 
     def ask_split_point(self, subtitle) -> int | None:

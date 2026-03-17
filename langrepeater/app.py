@@ -41,6 +41,7 @@ class AppController:
         self._stats_sub_map: dict[int, object] = {}
         self._stats_total_seconds: float = 0.0
         self._stats_page: int = 0
+        self._showing_stats: bool = False
 
     def run(self) -> None:
         while True:
@@ -82,9 +83,14 @@ class AppController:
             # "new" = new local file
             if sessions:
                 prev_dir = str(Path(sessions[0].media_path).parent)
-                start_dir = self.ui.ask_folder(prev_dir)
-                if start_dir is None:
+                result = self.ui.ask_folder(prev_dir)
+                if result is None:
                     continue
+                if Path(result).is_file():
+                    if self._select_file_directly(result):
+                        return True
+                    continue
+                start_dir = result
             else:
                 start_dir = "."
             if self._select_files(start_dir):
@@ -124,6 +130,38 @@ class AppController:
 
         self.media_path = audio_path
         self.srt_path = srt_path
+        self.current_index = 0
+        self._load_subtitles()
+        self._init_player()
+        return True
+
+    def _select_file_directly(self, file_path: str) -> bool:
+        """Handle a media file selected directly via file dialog."""
+        from .core import url_loader
+
+        path = Path(file_path)
+        if path.suffix.lower() == ".mp4":
+            self.ui.show_message("[dim]Extracting audio from mp4...[/dim]")
+            try:
+                media_path = url_loader.extract_audio(file_path)
+            except Exception as e:
+                self.ui.show_message(f"[red]Audio extraction failed: {e}[/red]")
+                return False
+        else:
+            media_path = file_path
+
+        self.media_path = media_path
+        srt_candidate = str(Path(media_path).with_suffix(".srt"))
+        if Path(srt_candidate).exists():
+            self.srt_path = srt_candidate
+        else:
+            self.ui.show_message("[dim]No matching srt file found. Transcribing with Whisper...[/dim]")
+            try:
+                self.srt_path = url_loader.transcribe(media_path)
+            except Exception as e:
+                self.ui.show_message(f"[red]Transcription failed: {e}[/red]")
+                return False
+
         self.current_index = 0
         self._load_subtitles()
         self._init_player()
@@ -198,9 +236,13 @@ class AppController:
                     self._handle_quit()
                     running = False
                 elif action == Action.HOME:
-                    self._handle_home()
-                    restart = True
-                    running = False
+                    if self._showing_stats:
+                        self._showing_stats = False
+                        self._refresh_display()
+                    else:
+                        self._handle_home()
+                        restart = True
+                        running = False
                 elif action == Action.PLAY:
                     self._handle_play()
                 elif action == Action.RESTART:
@@ -225,7 +267,12 @@ class AppController:
                 elif action == Action.SPLIT:
                     self._handle_split()
                 elif action == Action.PRINT_STATS:
-                    self._handle_print_stats()
+                    if self._showing_stats:
+                        self._showing_stats = False
+                        self._refresh_display()
+                    else:
+                        self._handle_print_stats()
+                        self._showing_stats = True
                 elif action == Action.STATS_NEXT:
                     self._handle_stats_page(1)
                 elif action == Action.STATS_PREV:
@@ -359,6 +406,7 @@ class AppController:
         finally:
             tty.setcbreak(self._fd)
         if split_pos is None:
+            self._refresh_display()
             return
         text_a = sub.text[:split_pos].rstrip()
         text_b = sub.text[split_pos:].lstrip()
