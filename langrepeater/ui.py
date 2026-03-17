@@ -244,6 +244,14 @@ class RichUI:
             pos = m.end()
             if 0 < pos < len(text) and pos not in positions:
                 positions.append(pos)
+        for m in re.finditer(r':\s*', text):
+            pos = m.end()
+            if 0 < pos < len(text) and pos not in positions:
+                positions.append(pos)
+        for m in re.finditer(r'\b(when|what|where|which|that)\b', text, re.IGNORECASE):
+            pos = m.start()
+            if 0 < pos < len(text) and pos not in positions:
+                positions.append(pos)
         # Japanese punctuation: 。！？、（split after）; 「」 splits before 「
         for m in re.finditer(r'[。！？]\s*', text):
             pos = m.end()
