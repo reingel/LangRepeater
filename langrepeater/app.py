@@ -311,23 +311,26 @@ class AppController:
         self._refresh_display()
         self._play_current()
 
-    def _handle_home(self) -> None:
-        if self.player:
-            self.player.stop()
+    def _save_progress(self) -> None:
         self.progress_store.upsert(Session(
             media_path=self.media_path,
             srt_path=self.srt_path,
             current_index=self.current_index,
         ))
+        if self.subtitles:
+            self.stats_store.update_progress(
+                self.media_path, self.current_index, len(self.subtitles)
+            )
+
+    def _handle_home(self) -> None:
+        if self.player:
+            self.player.stop()
+        self._save_progress()
 
     def _handle_quit(self) -> None:
         if self.player:
             self.player.stop()
-        self.progress_store.upsert(Session(
-            media_path=self.media_path,
-            srt_path=self.srt_path,
-            current_index=self.current_index,
-        ))
+        self._save_progress()
         self.ui.show_message("\n[dim]Progress saved. Exiting.[/dim]")
 
     def _play_current(self) -> None:
@@ -446,10 +449,12 @@ class AppController:
             for idx, count in stats.subtitle_play_counts.items()
             if idx in self._stats_sub_map
         )
+        progress_pct = (self.current_index + 1) / len(self.subtitles) * 100
         self._stats_page = 0
         self.ui.clear()
         self.ui.show_learning_stats(
-            self._stats_ranked, self._stats_sub_map, self._stats_total_seconds, self._stats_page
+            self._stats_ranked, self._stats_sub_map, self._stats_total_seconds,
+            self._stats_page, progress_pct,
         )
 
     def _handle_stats_page(self, direction: int) -> None:
@@ -464,9 +469,11 @@ class AppController:
             self.ui.show_message("[red]This is the last page.[/red]")
             return
         self._stats_page = new_page
+        progress_pct = (self.current_index + 1) / len(self.subtitles) * 100
         self.ui.clear()
         self.ui.show_learning_stats(
-            self._stats_ranked, self._stats_sub_map, self._stats_total_seconds, self._stats_page
+            self._stats_ranked, self._stats_sub_map, self._stats_total_seconds,
+            self._stats_page, progress_pct,
         )
 
     def _refresh_display(self) -> None:

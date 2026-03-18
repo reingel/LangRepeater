@@ -21,3 +21,4 @@ class SessionStats:
     media_path: str
     total_play_count: int = 0
     subtitle_play_counts: dict[int, int] = field(default_factory=dict)
+    progress_pct: float = 0.0

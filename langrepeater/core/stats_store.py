@@ -32,6 +32,7 @@ class StatsStore:
             subtitle_play_counts={
                 int(k): v for k, v in entry.get("subtitle_play_counts", {}).items()
             },
+            progress_pct=entry.get("progress_pct", 0.0),
         )
 
     def save(self, stats: SessionStats) -> None:
@@ -39,6 +40,7 @@ class StatsStore:
         raw[stats.media_path] = {
             "total_play_count": stats.total_play_count,
             "subtitle_play_counts": dict(stats.subtitle_play_counts),
+            "progress_pct": stats.progress_pct,
         }
         self._save_raw(raw)
 
@@ -47,6 +49,11 @@ class StatsStore:
         if media_path in raw:
             del raw[media_path]
             self._save_raw(raw)
+
+    def update_progress(self, media_path: str, current_index: int, total: int) -> None:
+        stats = self.load(media_path)
+        stats.progress_pct = (current_index + 1) / total * 100 if total > 0 else 0.0
+        self.save(stats)
 
     def increment_play(self, media_path: str, subtitle_index: int) -> None:
         stats = self.load(media_path)

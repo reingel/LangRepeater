@@ -228,36 +228,24 @@ class RichUI:
         text = subtitle.text
         # Find candidate split positions
         positions: list[int] = []
-        for m in re.finditer(r'\.\s+(?=\S)', text):  # mid-sentence period
-            pos = m.end()
-            if 0 < pos < len(text):
-                positions.append(pos)
-        for m in re.finditer(r',\s*', text):
-            pos = m.end()
-            if 0 < pos < len(text) and pos not in positions:
-                positions.append(pos)
+        # English: after . , ; :
+        for punct_pattern in (r'\.\s*', r',\s*', r';\s*', r':\s*'):
+            for m in re.finditer(punct_pattern, text):
+                pos = m.end()
+                if 0 < pos < len(text) and pos not in positions:
+                    positions.append(pos)
+        # English: before and/or
         for m in re.finditer(r'\b(and|or)\b', text, re.IGNORECASE):
             pos = m.start()
             if 0 < pos < len(text) and pos not in positions:
                 positions.append(pos)
-        for m in re.finditer(r';\s*', text):
-            pos = m.end()
-            if 0 < pos < len(text) and pos not in positions:
-                positions.append(pos)
-        for m in re.finditer(r':\s*', text):
-            pos = m.end()
-            if 0 < pos < len(text) and pos not in positions:
-                positions.append(pos)
+        # English: before clause words
         for m in re.finditer(r'\b(when|what|where|which|that)\b', text, re.IGNORECASE):
             pos = m.start()
             if 0 < pos < len(text) and pos not in positions:
                 positions.append(pos)
-        # Japanese punctuation: 。！？、（split after）; 「」 splits before 「
-        for m in re.finditer(r'[。！？]\s*', text):
-            pos = m.end()
-            if 0 < pos < len(text) and pos not in positions:
-                positions.append(pos)
-        for m in re.finditer(r'、\s*', text):
+        # Japanese: after 。！？、
+        for m in re.finditer(r'[。！？、]\s*', text):
             pos = m.end()
             if 0 < pos < len(text) and pos not in positions:
                 positions.append(pos)
@@ -266,10 +254,14 @@ class RichUI:
             console.print("[yellow]No split points found.[/yellow]")
             return None
         console.print("\n[bold]Select split point:[/bold]")
+        line = Text()
+        prev = 0
         for i, pos in enumerate(positions, 1):
-            before = text[:pos].rstrip()
-            after = text[pos:].lstrip()
-            console.print(f"  [cyan]{i}[/cyan]. {before} [bold red]|[/bold red] {after}")
+            line.append(text[prev:pos])
+            line.append(f" ({i}) ", style="bold red")
+            prev = pos
+        line.append(text[prev:])
+        console.print(line)
         while True:
             raw = console.input(f"\nEnter number (1-{len(positions)}) or C to cancel: ").strip()
             if raw.lower() == "c":
@@ -293,13 +285,14 @@ class RichUI:
         sub_map: dict[int, Subtitle],
         total_seconds: float,
         page: int,
+        progress_pct: float = 0.0,
     ) -> None:
         page_size = 10
         total = len(ranked)
         start = page * page_size
         end = min(start + page_size, total)
         entries = ranked[start:end]
-        console.print("\n[bold cyan]── Learning Statistics ──[/bold cyan]")
+        console.print(f"\n[bold cyan]── Learning Statistics ──[/bold cyan]  [dim]Progress: {progress_pct:.1f}%[/dim]")
         for rank, (idx, count) in enumerate(entries, start + 1):
             text = sub_map[idx].text if idx in sub_map else f"(subtitle {idx})"
             console.print(f"  [cyan]{rank:>2}[/cyan]. [bold]{count}x[/bold]  [dim]#{idx}[/dim]  {text}")
