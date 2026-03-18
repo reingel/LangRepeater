@@ -258,7 +258,7 @@ class RichUI:
         prev = 0
         for i, pos in enumerate(positions, 1):
             line.append(text[prev:pos])
-            line.append(f" ({i}) ", style="bold red")
+            line.append(f"({i}) ", style="bold red")
             prev = pos
         line.append(text[prev:])
         console.print(line)
