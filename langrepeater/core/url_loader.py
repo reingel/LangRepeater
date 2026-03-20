@@ -37,33 +37,53 @@ def transcribe(audio_path: str) -> str:
 
     Returns the path to the generated SRT file.
     """
+    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
     import whisper
 
     model = whisper.load_model("base")
     result = model.transcribe(audio_path)
 
-    # Group whisper segments into sentences by sentence-ending punctuation
+    # Group whisper segments into sentences by sentence-ending punctuation or max length.
+    MAX_WORDS = 30
     sentences: list[tuple[float, float, str]] = []
     buf_text = ""
     buf_start: float | None = None
     buf_end: float | None = None
 
+    def flush(start: float, end: float, text: str) -> None:
+        sentences.append((start, end, text))
+
+    def _is_japanese(s: str) -> bool:
+        return any(
+            "\u3040" <= c <= "\u309f"  # Hiragana
+            or "\u30a0" <= c <= "\u30ff"  # Katakana
+            or "\u4e00" <= c <= "\u9fff"  # Kanji
+            for c in s
+        )
+
     for seg in result["segments"]:
-        text = seg["text"].strip()
+        raw = seg["text"]
+        text = raw.strip()
         if not text:
             continue
+        if _is_japanese(raw):
+            if text[-1] != "。":
+                text += "。"
+            text = text.replace(" ", "、")
         if buf_start is None:
             buf_start = seg["start"]
         buf_end = seg["end"]
-        buf_text = (buf_text + " " + text).strip() if buf_text else text
-        if text[-1] in ".!?":
-            sentences.append((buf_start, buf_end, buf_text))
+        buf_text = (buf_text + text).strip() if buf_text else text
+        ends_sentence = text[-1] in ".!?。！？"
+        too_long = len(buf_text.split()) >= MAX_WORDS
+        if ends_sentence or too_long:
+            flush(buf_start, buf_end, buf_text)
             buf_text = ""
             buf_start = None
             buf_end = None
 
     if buf_text and buf_start is not None:
-        sentences.append((buf_start, buf_end, buf_text))  # type: ignore[arg-type]
+        flush(buf_start, buf_end, buf_text)  # type: ignore[arg-type]
 
     srt_path = str(Path(audio_path).with_suffix(".srt"))
     with open(srt_path, "w", encoding="utf-8") as f:

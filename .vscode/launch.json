@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "LangRepeater",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "langrepeater.main",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "python": "/Users/reingel/miniconda3/bin/python",
+            "justMyCode": true
+        }
+    ]
+}

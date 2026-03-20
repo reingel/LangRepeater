@@ -68,8 +68,21 @@ class AppController:
                     continue
                 session = sessions[idx]
                 self.media_path = session.media_path
-                self.srt_path = session.srt_path
                 self.current_index = session.current_index
+                if Path(session.srt_path).exists():
+                    self.srt_path = session.srt_path
+                else:
+                    srt_candidate = str(Path(session.media_path).with_suffix(".srt"))
+                    if Path(srt_candidate).exists():
+                        self.srt_path = srt_candidate
+                    else:
+                        self.ui.show_message("[dim]SRT file not found. Transcribing with Whisper...[/dim]")
+                        from .core import url_loader
+                        try:
+                            self.srt_path = url_loader.transcribe(session.media_path)
+                        except Exception as e:
+                            self.ui.show_message(f"[red]Transcription failed: {e}[/red]")
+                            continue
                 self._load_subtitles()
                 self._init_player()
                 return True
