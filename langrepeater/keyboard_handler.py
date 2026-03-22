@@ -61,6 +61,10 @@ def read_action(fd: int, timeout: float = 0.1) -> Action | None:
                 rlist3, _, _ = select.select([fd], [], [], 0.05)
                 if rlist3:
                     ch3 = os.read(fd, 1)
+                    if ch3 == b"A":
+                        return Action.PREV   # up arrow
+                    if ch3 == b"B":
+                        return Action.NEXT   # down arrow
                     if ch3 == b"C":
                         return Action.NEXT   # right arrow
                     if ch3 == b"D":
