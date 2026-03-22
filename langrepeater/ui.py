@@ -11,7 +11,7 @@ console = Console()
 
 class RichUI:
     _HELP_TEXT = (
-        "[dim]Space: play/pause  |  S: replay  |  D/→/↓: next  |  A/←/↑: prev  |  Q: quit[/dim]\n"
+        "[dim]Space: play/pause  |  S: replay  |  A/←/↑: prev  |  D/→/↓: next  |  Q: quit[/dim]\n"
         "[dim]Z: start -0.1s  |  X: start +0.1s  |  ,: end -0.1s  |  .: end +0.1s[/dim]\n"
         "[dim]U: merge with next  |  I: split  |  V: show/hide subtitle[/dim]\n"
         "[dim]P: stats  |  ]: next page  |  [: prev page  |  ESC: home[/dim]"
