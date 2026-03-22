@@ -84,12 +84,12 @@ class RichUI:
             if idx == current_index:
                 ts = f"[{sub.start:.1f}s ~ {sub.end:.1f}s]"
                 line = Text()
-                line.append(f"{sub.index:>4}  ", style="dim")
+                line.append(f"{sub.index:>4}  ", style="dim bold cyan")
                 line.append(display_text, style="bold white")
-                line.append(f"  {ts}", style="dim cyan")
+                line.append(f"  {ts}", style="dim bold cyan")
                 console.print(line)
             else:
-                console.print(f"[dim]{sub.index:>4}  {display_text}[/dim]")
+                console.print(f"[dim white]{sub.index:>4}  {display_text}[/dim white]")
 
         # show progress info
         progress_pct = (current_index + 1) / n * 100
