@@ -4,6 +4,38 @@ A language-learning tool that repeatedly plays audio segments from MP3/MP4 files
 
 ---
 
+## Requirements
+
+The following external tools must be installed before using LangRepeater:
+
+### ffmpeg
+
+Required by Whisper to process audio files.
+
+```bash
+brew install ffmpeg
+```
+
+### yt-dlp
+
+Required for downloading audio from URLs.
+
+```bash
+brew install yt-dlp
+# or
+pip install yt-dlp
+```
+
+### Whisper
+
+Required for auto-generating SRT subtitle files.
+
+```bash
+pip install openai-whisper
+```
+
+---
+
 ## Installation
 
 ```bash
@@ -41,8 +73,8 @@ LangRepeaterAPI          # http://localhost:8000
 |---|---|
 | Play / pause current segment | `Space` |
 | Replay from start | `S` |
-| Next segment | `D` / `→` |
-| Previous segment | `A` / `←` |
+| Next segment | `D` / `→` / `↓` |
+| Previous segment | `A` / `←` / `↑` |
 | Show / hide subtitle | `V` |
 | Quit | `Q` |
 | Home screen | `ESC` |
