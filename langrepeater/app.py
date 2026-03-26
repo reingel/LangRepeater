@@ -1,5 +1,6 @@
 import sys
 import termios
+import time
 import tty
 from pathlib import Path
 
@@ -42,6 +43,10 @@ class AppController:
         self._stats_total_seconds: float = 0.0
         self._stats_page: int = 0
         self._showing_stats: bool = False
+        self._play_start_time: float = 0.0
+        self._play_duration: float = 0.0
+        self._paused_at: float = 0.0
+        self._was_playing: bool = False
 
     def run(self) -> None:
         while True:
@@ -243,6 +248,15 @@ class AppController:
             while running:
                 action = read_action(fd, timeout=0.1)
                 if action is None:
+                    if not self._showing_stats and self._play_duration > 0:
+                        is_playing = self.player is not None and self.player.is_playing()
+                        if is_playing:
+                            elapsed = time.monotonic() - self._play_start_time
+                            progress = min(1.0, elapsed / self._play_duration)
+                            self.ui.update_animation_line(progress)
+                        elif self._was_playing and not self._paused:
+                            self.ui.update_animation_line(1.0)
+                        self._was_playing = is_playing
                     continue
 
                 if action == Action.QUIT:
@@ -302,9 +316,11 @@ class AppController:
         if self.player.is_playing():
             self.player.toggle_pause()
             self._paused = True
+            self._paused_at = time.monotonic()
         elif self._paused:
             self.player.toggle_pause()
             self._paused = False
+            self._play_start_time += time.monotonic() - self._paused_at
         else:
             self._play_current()
 
@@ -353,6 +369,10 @@ class AppController:
         sub = self.subtitles[self.current_index]
         media_path = self.media_path
         sub_index = sub.index
+        self._play_start_time = time.monotonic()
+        self._play_duration = sub.end - sub.start
+        self._was_playing = False
+        self.ui.update_animation_line(0.0)
         self.player.play_segment(
             self.media_path, sub.start, sub.end,
             on_complete=lambda: self.stats_store.increment_play(media_path, sub_index),
@@ -363,6 +383,7 @@ class AppController:
         if self.player is None:
             return
         self._paused = False
+        self._play_duration = 0.0  # suppress animation during preview
         self.player.play_segment(self.media_path, start, end, on_complete=None)
 
     def _handle_shift_start(self, delta: float) -> None:
@@ -493,3 +514,9 @@ class AppController:
         self.ui.clear()
         self.ui.show_study_header()
         self.ui.show_subtitles(self.subtitles, self.current_index, masked=self._subtitle_masked)
+        if self.player and self.player.is_playing() and self._play_duration > 0:
+            elapsed = time.monotonic() - self._play_start_time
+            progress = min(1.0, elapsed / self._play_duration)
+        else:
+            progress = 0.0
+        self.ui.show_animation_line(progress)

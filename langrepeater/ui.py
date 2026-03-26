@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 from rich.console import Console
@@ -77,6 +78,12 @@ class RichUI:
             else:
                 indices = [current_index - 1, current_index, current_index + 1]
 
+        # show progress info
+        progress_pct = (current_index + 1) / n * 100
+        console.print(
+            f"\n[dim]Progress: {current_index + 1}/{n} ({progress_pct:.1f}%)[/dim]"
+        )
+
         console.print()
         for idx in indices:
             sub = subtitles[idx]
@@ -90,12 +97,6 @@ class RichUI:
                 console.print(line)
             else:
                 console.print(f"[dim white]{sub.index:>4}  {display_text}[/dim white]")
-
-        # show progress info
-        progress_pct = (current_index + 1) / n * 100
-        console.print(
-            f"\n[dim]Progress: {current_index + 1}/{n} ({progress_pct:.1f}%)[/dim]"
-        )
 
     def show_home_menu(self, has_sessions: bool) -> str:
         """Show home menu. Returns: 'resume'|'new'|'url'|'delete'|'quit'."""
@@ -271,6 +272,24 @@ class RichUI:
                 if 1 <= n <= len(positions):
                     return positions[n - 1]
             console.print("[red]Please enter a valid number.[/red]")
+
+    @staticmethod
+    def _make_animation_bar(progress: float, width: int = 20) -> str:
+        """Build ─●─ style bar where ● slides left to right as progress goes 0→1."""
+        pos = min(width - 1, max(0, round(progress * (width - 1))))
+        return "─" * pos + "●" + "─" * (width - 1 - pos)
+
+    def show_animation_line(self, progress: float = 0.0) -> None:
+        """Print animation bar as a new line (call after show_subtitles)."""
+        bar = self._make_animation_bar(progress)
+        sys.stdout.write(f"\n      {bar}\n")
+        sys.stdout.flush()
+
+    def update_animation_line(self, progress: float) -> None:
+        """Overwrite animation bar in-place (cursor must be on the line after the bar)."""
+        bar = self._make_animation_bar(progress)
+        sys.stdout.write(f"\033[1A\r\033[2K      {bar}\n")
+        sys.stdout.flush()
 
     def show_message(self, msg: str) -> None:
         console.print(msg)
