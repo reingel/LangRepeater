@@ -279,16 +279,22 @@ class RichUI:
         pos = min(width - 1, max(0, round(progress * (width - 1))))
         return "─" * pos + "●" + "─" * (width - 1 - pos)
 
-    def show_animation_line(self, progress: float = 0.0) -> None:
+    def show_animation_line(self, progress: float = 0.0, dim: bool = True) -> None:
         """Print animation bar as a new line (call after show_subtitles)."""
         bar = self._make_animation_bar(progress)
-        sys.stdout.write(f"\n      {bar}\n")
+        if dim:
+            sys.stdout.write(f"\n\033[2m      {bar}\033[0m\n")
+        else:
+            sys.stdout.write(f"\n      {bar}\n")
         sys.stdout.flush()
 
-    def update_animation_line(self, progress: float) -> None:
+    def update_animation_line(self, progress: float, dim: bool = False) -> None:
         """Overwrite animation bar in-place (cursor must be on the line after the bar)."""
         bar = self._make_animation_bar(progress)
-        sys.stdout.write(f"\033[1A\r\033[2K      {bar}\n")
+        if dim:
+            sys.stdout.write(f"\033[1A\r\033[2K\033[2m      {bar}\033[0m\n")
+        else:
+            sys.stdout.write(f"\033[1A\r\033[2K      {bar}\n")
         sys.stdout.flush()
 
     def show_message(self, msg: str) -> None:

@@ -46,6 +46,7 @@ class AppController:
         self._play_start_time: float = 0.0
         self._play_duration: float = 0.0
         self._paused_at: float = 0.0
+        self._paused_progress: float = 0.0
         self._was_playing: bool = False
 
     def run(self) -> None:
@@ -255,7 +256,7 @@ class AppController:
                             progress = min(1.0, elapsed / self._play_duration)
                             self.ui.update_animation_line(progress)
                         elif self._was_playing and not self._paused:
-                            self.ui.update_animation_line(1.0)
+                            self.ui.update_animation_line(1.0, dim=True)
                         self._was_playing = is_playing
                     continue
 
@@ -317,6 +318,10 @@ class AppController:
             self.player.toggle_pause()
             self._paused = True
             self._paused_at = time.monotonic()
+            if self._play_duration > 0:
+                elapsed = self._paused_at - self._play_start_time
+                self._paused_progress = min(1.0, elapsed / self._play_duration)
+                self.ui.update_animation_line(self._paused_progress, dim=True)
         elif self._paused:
             self.player.toggle_pause()
             self._paused = False
@@ -517,6 +522,8 @@ class AppController:
         if self.player and self.player.is_playing() and self._play_duration > 0:
             elapsed = time.monotonic() - self._play_start_time
             progress = min(1.0, elapsed / self._play_duration)
+            self.ui.show_animation_line(progress, dim=False)
+        elif self._paused and self._play_duration > 0:
+            self.ui.show_animation_line(self._paused_progress, dim=True)
         else:
-            progress = 0.0
-        self.ui.show_animation_line(progress)
+            self.ui.show_animation_line(0.0, dim=True)
