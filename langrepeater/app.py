@@ -399,11 +399,12 @@ class AppController:
         )
 
     def _play_preview(self, start: float, end: float) -> None:
-        """Play a time range without counting toward stats (for timestamp adjustments)."""
         if self.player is None:
             return
         self._paused = False
-        self._play_duration = 0.0  # suppress animation during preview
+        self._play_duration = end - start
+        self._play_start_time = time.monotonic()
+        self._was_playing = False
         self.player.play_segment(self.media_path, start, end, on_complete=None)
 
     def _handle_shift_start(self, delta: float) -> None:

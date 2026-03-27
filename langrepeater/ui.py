@@ -348,9 +348,10 @@ class RichUI:
         end = min(start + page_size, total)
         page_entries = entries[start:end]
         console.print(f"\n[bold cyan]── Date Statistics ──[/bold cyan]  [dim]Progress: {progress_pct:.1f}%[/dim]")
-        console.print(f"\n[bold white]              no. segments    net play time[/bold white]")
+        console.print(f"\n[bold white]              segments  repeats   net play time[/bold white]")
         for date_str, sc in page_entries:
             subtitle_count = len(sc)
+            repeat_count = sum(sc.values())
             total_seconds = sum(
                 (sub_map[idx].end - sub_map[idx].start) * count
                 for idx, count in sc.items()
@@ -359,7 +360,7 @@ class RichUI:
             hours, rem = divmod(int(total_seconds), 3600)
             minutes, seconds = divmod(rem, 60)
             time_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
-            console.print(f"  [cyan]{date_str}[/cyan][white]     {subtitle_count:>4}           {time_str}")
+            console.print(f"  [cyan]{date_str}[/cyan][white]  {subtitle_count:>6}   {repeat_count:>6}     {time_str:>11}")
         page_count = max(1, -(-total // page_size))
         console.print(f"\n[dim]Page {page + 1}/{page_count}[/dim]")
 
