@@ -43,6 +43,9 @@ class AppController:
         self._stats_total_seconds: float = 0.0
         self._stats_page: int = 0
         self._showing_stats: bool = False
+        self._showing_date_stats: bool = False
+        self._date_stats_entries: list[tuple[str, dict[int, int]]] = []
+        self._date_stats_page: int = 0
         self._play_start_time: float = 0.0
         self._play_duration: float = 0.0
         self._paused_at: float = 0.0
@@ -249,7 +252,7 @@ class AppController:
             while running:
                 action = read_action(fd, timeout=0.1)
                 if action is None:
-                    if not self._showing_stats and self._play_duration > 0:
+                    if not self._showing_stats and not self._showing_date_stats and self._play_duration > 0:
                         is_playing = self.player is not None and self.player.is_playing()
                         if is_playing:
                             elapsed = time.monotonic() - self._play_start_time
@@ -266,6 +269,9 @@ class AppController:
                 elif action == Action.HOME:
                     if self._showing_stats:
                         self._showing_stats = False
+                        self._refresh_display()
+                    elif self._showing_date_stats:
+                        self._showing_date_stats = False
                         self._refresh_display()
                     else:
                         self._handle_home()
@@ -299,8 +305,17 @@ class AppController:
                         self._showing_stats = False
                         self._refresh_display()
                     else:
+                        self._showing_date_stats = False
                         self._handle_print_stats()
                         self._showing_stats = True
+                elif action == Action.PRINT_DATE_STATS:
+                    if self._showing_date_stats:
+                        self._showing_date_stats = False
+                        self._refresh_display()
+                    else:
+                        self._showing_stats = False
+                        self._handle_print_date_stats()
+                        self._showing_date_stats = True
                 elif action == Action.STATS_NEXT:
                     self._handle_stats_page(1)
                 elif action == Action.STATS_PREV:
@@ -496,7 +511,35 @@ class AppController:
             self._stats_page, progress_pct,
         )
 
+    def _handle_print_date_stats(self) -> None:
+        if not self.subtitles:
+            return
+        sub_map = {sub.index: sub for sub in self.subtitles}
+        self._stats_sub_map = sub_map
+        self._date_stats_entries = self.stats_store.load_date_stats(self.media_path)
+        self._date_stats_page = 0
+        progress_pct = (self.current_index + 1) / len(self.subtitles) * 100
+        self.ui.clear()
+        self.ui.show_date_stats(self._date_stats_entries, sub_map, self._date_stats_page, progress_pct)
+
     def _handle_stats_page(self, direction: int) -> None:
+        progress_pct = (self.current_index + 1) / len(self.subtitles) * 100
+        if self._showing_date_stats:
+            total = len(self._date_stats_entries)
+            page_count = max(1, -(-total // 10))
+            new_page = self._date_stats_page + direction
+            if new_page < 0:
+                self.ui.show_message("[red]This is the first page.[/red]")
+                return
+            if new_page >= page_count:
+                self.ui.show_message("[red]This is the last page.[/red]")
+                return
+            self._date_stats_page = new_page
+            self.ui.clear()
+            self.ui.show_date_stats(
+                self._date_stats_entries, self._stats_sub_map, self._date_stats_page, progress_pct,
+            )
+            return
         if not self._stats_ranked:
             return
         page_count = max(1, -(-len(self._stats_ranked) // 10))  # ceil division
@@ -508,7 +551,6 @@ class AppController:
             self.ui.show_message("[red]This is the last page.[/red]")
             return
         self._stats_page = new_page
-        progress_pct = (self.current_index + 1) / len(self.subtitles) * 100
         self.ui.clear()
         self.ui.show_learning_stats(
             self._stats_ranked, self._stats_sub_map, self._stats_total_seconds,

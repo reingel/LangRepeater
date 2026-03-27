@@ -17,6 +17,7 @@ class Action(Enum):
     SPLIT = auto()
     TOGGLE_SUBTITLE = auto()
     PRINT_STATS = auto()
+    PRINT_DATE_STATS = auto()
     STATS_NEXT = auto()
     STATS_PREV = auto()
     HOME = auto()
@@ -36,6 +37,7 @@ _CHAR_MAP: dict[str, Action] = {
     "i": Action.SPLIT,
     "v": Action.TOGGLE_SUBTITLE,
     "p": Action.PRINT_STATS,
+    "0": Action.PRINT_DATE_STATS,
     "]": Action.STATS_NEXT,
     "[": Action.STATS_PREV,
 }
