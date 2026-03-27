@@ -53,13 +53,19 @@ class RichUI:
                     return n - 1
             console.print("[red]Please enter a valid number.[/red]")
 
+    _VISIBLE_PUNCT = frozenset(".,;:?!-")
+
+    @staticmethod
+    def _mask_word(word: str) -> str:
+        return "".join(c if c in RichUI._VISIBLE_PUNCT else "_" for c in word)
+
     @staticmethod
     def _mask_text(text: str) -> str:
-        """Return text with middle words replaced by ___, keeping first and last word."""
+        """Return text with middle words masked, keeping first/last word and punctuation (,;:?!-) visible."""
         words = text.split()
         if len(words) <= 2:
             return text
-        return words[0] + " " + " ".join("_" * len(w) for w in words[1:-1]) + " " + words[-1]
+        return words[0] + " " + " ".join(RichUI._mask_word(w) for w in words[1:-1]) + " " + words[-1]
 
     def show_subtitles(self, subtitles: list[Subtitle], current_index: int, masked: bool = True) -> None:
         n = len(subtitles)
