@@ -15,7 +15,7 @@ class RichUI:
         "[dim]Space: play/pause  |  S: replay  |  A/←/↑: prev  |  D/→/↓: next  |  Q: quit[/dim]\n"
         "[dim]Z: start -0.1s  |  X: start +0.1s  |  ,: end -0.1s  |  .: end +0.1s[/dim]\n"
         "[dim]U: merge with next  |  I: split  |  V: show/hide subtitle[/dim]\n"
-        "[dim]P: stats  |  ]: next page  |  [: prev page  |  ESC: home[/dim]"
+        "[dim]P: segment stats  |  0: date stats  |  [: prev page  |  ]: next page  |  ESC: home[/dim]"
     )
 
     def clear(self) -> None:
@@ -90,7 +90,7 @@ class RichUI:
         filled = round(progress_pct / 100 * total_num_blocks)
         bar = "█" * filled + "░" * (total_num_blocks - filled)
         console.print(
-            f"\n[dim]Progress: {current_index + 1}/{n} ({progress_pct:.1f}%)  {bar}[/dim]"
+            f"\n [dim]Progress: {current_index + 1}/{n} ({progress_pct:.1f}%)  {bar}[/dim]"
         )
 
         console.print()
@@ -334,6 +334,35 @@ class RichUI:
         minutes, seconds = divmod(rem, 60)
         time_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
         console.print(f"\n[dim]Total listening time: {time_str}  |  Page {page + 1}/{max(1, -(-total // page_size))}[/dim]")
+
+    def show_date_stats(
+        self,
+        entries: list[tuple[str, dict[int, int]]],
+        sub_map: dict[int, Subtitle],
+        page: int,
+        progress_pct: float = 0.0,
+    ) -> None:
+        page_size = 10
+        total = len(entries)
+        start = page * page_size
+        end = min(start + page_size, total)
+        page_entries = entries[start:end]
+        console.print(f"\n[bold cyan]── Date Statistics ──[/bold cyan]  [dim]Progress: {progress_pct:.1f}%[/dim]")
+        console.print(f"\n[bold white]              segments  repeats   net play time[/bold white]")
+        for date_str, sc in page_entries:
+            subtitle_count = len(sc)
+            repeat_count = sum(sc.values())
+            total_seconds = sum(
+                (sub_map[idx].end - sub_map[idx].start) * count
+                for idx, count in sc.items()
+                if idx in sub_map
+            )
+            hours, rem = divmod(int(total_seconds), 3600)
+            minutes, seconds = divmod(rem, 60)
+            time_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
+            console.print(f"  [cyan]{date_str}[/cyan][white]  {subtitle_count:>6}   {repeat_count:>6}     {time_str:>11}")
+        page_count = max(1, -(-total // page_size))
+        console.print(f"\n[dim]Page {page + 1}/{page_count}[/dim]")
 
     def show_stats(self, total_play: int, subtitle_index: int, subtitle_play: int) -> None:
         console.print(
