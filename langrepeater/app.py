@@ -263,20 +263,31 @@ class AppController:
                         self._was_playing = is_playing
                     continue
 
+                if self._showing_stats or self._showing_date_stats:
+                    if action == Action.QUIT:
+                        self._handle_quit()
+                        running = False
+                    elif action in (Action.STATS_NEXT, Action.STATS_PREV):
+                        self._handle_stats_page(1 if action == Action.STATS_NEXT else -1)
+                    elif action == Action.PRINT_STATS and self._showing_stats:
+                        self._showing_stats = False
+                        self._refresh_display()
+                    elif action == Action.PRINT_DATE_STATS and self._showing_date_stats:
+                        self._showing_date_stats = False
+                        self._refresh_display()
+                    else:
+                        self._showing_stats = False
+                        self._showing_date_stats = False
+                        self._refresh_display()
+                    continue
+
                 if action == Action.QUIT:
                     self._handle_quit()
                     running = False
                 elif action == Action.HOME:
-                    if self._showing_stats:
-                        self._showing_stats = False
-                        self._refresh_display()
-                    elif self._showing_date_stats:
-                        self._showing_date_stats = False
-                        self._refresh_display()
-                    else:
-                        self._handle_home()
-                        restart = True
-                        running = False
+                    self._handle_home()
+                    restart = True
+                    running = False
                 elif action == Action.PLAY:
                     self._handle_play()
                 elif action == Action.RESTART:
@@ -301,21 +312,11 @@ class AppController:
                 elif action == Action.SPLIT:
                     self._handle_split()
                 elif action == Action.PRINT_STATS:
-                    if self._showing_stats:
-                        self._showing_stats = False
-                        self._refresh_display()
-                    else:
-                        self._showing_date_stats = False
-                        self._handle_print_stats()
-                        self._showing_stats = True
+                    self._handle_print_stats()
+                    self._showing_stats = True
                 elif action == Action.PRINT_DATE_STATS:
-                    if self._showing_date_stats:
-                        self._showing_date_stats = False
-                        self._refresh_display()
-                    else:
-                        self._showing_stats = False
-                        self._handle_print_date_stats()
-                        self._showing_date_stats = True
+                    self._handle_print_date_stats()
+                    self._showing_date_stats = True
                 elif action == Action.STATS_NEXT:
                     self._handle_stats_page(1)
                 elif action == Action.STATS_PREV:
