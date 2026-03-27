@@ -79,9 +79,12 @@ class RichUI:
                 indices = [current_index - 1, current_index, current_index + 1]
 
         # show progress info
+        total_num_blocks = 51
         progress_pct = (current_index + 1) / n * 100
+        filled = round(progress_pct / 100 * total_num_blocks)
+        bar = "█" * filled + "░" * (total_num_blocks - filled)
         console.print(
-            f"\n[dim]Progress: {current_index + 1}/{n} ({progress_pct:.1f}%)[/dim]"
+            f"\n[dim]Progress: {current_index + 1}/{n} ({progress_pct:.1f}%)  {bar}[/dim]"
         )
 
         console.print()
