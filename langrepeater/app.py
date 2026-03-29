@@ -51,6 +51,8 @@ class AppController:
         self._paused_at: float = 0.0
         self._paused_progress: float = 0.0
         self._was_playing: bool = False
+        self._mode: str = "LR"  # "L" = Listening mode, "LR" = Listen & Repeat mode
+        self._lr_mode_index: int = 0  # LR모드 복귀 시 돌아갈 자막 인덱스
 
     def run(self) -> None:
         while True:
@@ -254,14 +256,29 @@ class AppController:
             while running:
                 action = read_action(fd, timeout=0.1)
                 if action is None:
-                    if not self._showing_stats and not self._showing_date_stats and self._play_duration > 0:
+                    if not self._showing_stats and not self._showing_date_stats:
                         is_playing = self.player is not None and self.player.is_playing()
-                        if is_playing:
-                            elapsed = time.monotonic() - self._play_start_time
-                            progress = min(1.0, elapsed / self._play_duration)
-                            self.ui.update_animation_line(progress)
-                        elif self._was_playing and not self._paused:
-                            self.ui.update_animation_line(1.0, dim=True)
+                        if self._mode == "L" and self.subtitles:
+                            if is_playing:
+                                pos = self.player.get_position()
+                                new_index = self._find_subtitle_index_by_pos(pos)
+                                if new_index != self.current_index:
+                                    self.current_index = new_index
+                                    self._refresh_display()
+                                sub = self.subtitles[self.current_index]
+                                duration = sub.end - sub.start
+                                if duration > 0:
+                                    progress = min(1.0, max(0.0, (pos - sub.start) / duration))
+                                    self.ui.update_animation_line(progress)
+                            elif self._was_playing and not self._paused:
+                                self.ui.update_animation_line(1.0, dim=True)
+                        elif self._play_duration > 0:
+                            if is_playing:
+                                elapsed = time.monotonic() - self._play_start_time
+                                progress = min(1.0, elapsed / self._play_duration)
+                                self.ui.update_animation_line(progress)
+                            elif self._was_playing and not self._paused:
+                                self.ui.update_animation_line(1.0, dim=True)
                         self._was_playing = is_playing
                     continue
 
@@ -290,14 +307,35 @@ class AppController:
                     self._handle_home()
                     restart = True
                     running = False
+                elif action == Action.MODE_LISTENING:
+                    if self._mode != "L":
+                        self._lr_mode_index = self.current_index
+                        self._mode = "L"
+                        self._refresh_display()
+                        self._start_l_mode_playback()
+                elif action == Action.MODE_LISTEN_REPEAT:
+                    if self._mode != "LR":
+                        self._mode = "LR"
+                        if self.player:
+                            self.player.stop()
+                        self._paused = False
+                        self._was_playing = False
+                        self._play_duration = 0.0
+                        self.current_index = self._lr_mode_index
+                        self._refresh_display()
                 elif action == Action.PLAY:
                     self._handle_play()
-                elif action == Action.RESTART:
-                    self._handle_restart()
                 elif action == Action.NEXT:
                     self._handle_next()
                 elif action == Action.PREV:
                     self._handle_prev()
+                elif action == Action.TOGGLE_SUBTITLE:
+                    self._subtitle_masked = not self._subtitle_masked
+                    self._refresh_display()
+                elif self._mode == "L":
+                    pass  # L모드에서는 위 키 외 다른 키 무시
+                elif action == Action.RESTART:
+                    self._handle_restart()
                 elif action == Action.SHIFT_START_EARLIER:
                     self._handle_shift_start(-0.1)
                 elif action == Action.SHIFT_START_LATER:
@@ -306,9 +344,6 @@ class AppController:
                     self._handle_shift_end(-0.1)
                 elif action == Action.SHIFT_END_LATER:
                     self._handle_shift_end(0.1)
-                elif action == Action.TOGGLE_SUBTITLE:
-                    self._subtitle_masked = not self._subtitle_masked
-                    self._refresh_display()
                 elif action == Action.MERGE:
                     self._handle_merge()
                 elif action == Action.SPLIT:
@@ -345,23 +380,32 @@ class AppController:
             self._paused = False
             self._play_start_time += time.monotonic() - self._paused_at
         else:
-            self._play_current()
+            if self._mode == "L":
+                self._start_l_mode_playback()
+            else:
+                self._play_current()
 
     def _handle_restart(self) -> None:
-        # S: always restart segment from beginning
+        # S: always restart segment from beginning (LR mode only)
         self._play_current()
 
     def _handle_next(self) -> None:
         if self.current_index < len(self.subtitles) - 1:
             self.current_index += 1
         self._refresh_display()
-        self._play_current()
+        if self._mode == "L":
+            self._start_l_mode_playback()
+        else:
+            self._play_current()
 
     def _handle_prev(self) -> None:
         if self.current_index > 0:
             self.current_index -= 1
         self._refresh_display()
-        self._play_current()
+        if self._mode == "L":
+            self._start_l_mode_playback()
+        else:
+            self._play_current()
 
     def _save_progress(self) -> None:
         self.progress_store.upsert(Session(
@@ -384,6 +428,22 @@ class AppController:
             self.player.stop()
         self._save_progress()
         self.ui.show_message("\n[dim]Progress saved. Exiting.[/dim]")
+
+    def _start_l_mode_playback(self) -> None:
+        """L모드: 현재 자막 시작점부터 종료 타이머 없이 연속 재생."""
+        if not self.subtitles or self.player is None:
+            return
+        self._paused = False
+        sub = self.subtitles[self.current_index]
+        self._was_playing = False
+        self.player.play_segment(self.media_path, sub.start, end=None, on_complete=None)
+
+    def _find_subtitle_index_by_pos(self, pos: float) -> int:
+        """재생 위치(초)에 해당하는 자막 인덱스 반환."""
+        for i, sub in enumerate(self.subtitles):
+            if sub.start <= pos < sub.end:
+                return i
+        return self.current_index
 
     def _play_current(self) -> None:
         if not self.subtitles or self.player is None:
@@ -563,7 +623,7 @@ class AppController:
 
     def _refresh_display(self) -> None:
         self.ui.clear()
-        self.ui.show_study_header()
+        self.ui.show_study_header(self._mode)
         self.ui.show_subtitles(self.subtitles, self.current_index, masked=self._subtitle_masked)
         if self.player and self.player.is_playing() and self._play_duration > 0:
             elapsed = time.monotonic() - self._play_start_time

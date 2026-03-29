@@ -11,11 +11,14 @@ console = Console()
 
 
 class RichUI:
-    _HELP_TEXT = (
+    _HELP_TEXT_LR = (
         "[dim]Space: play/pause  |  S: replay  |  A/←/↑: prev  |  D/→/↓: next  |  Q: quit[/dim]\n"
         "[dim]Z: start -0.1s  |  X: start +0.1s  |  ,: end -0.1s  |  .: end +0.1s[/dim]\n"
         "[dim]U: merge with next  |  I: split  |  V: show/hide subtitle[/dim]\n"
         "[dim]P: segment stats  |  0: date stats  |  [: prev page  |  ]: next page  |  ESC: home[/dim]"
+    )
+    _HELP_TEXT_L = (
+        "[dim]Space: play/pause  |  ESC: home  |  Q: quit[/dim]"
     )
 
     def clear(self) -> None:
@@ -31,10 +34,22 @@ class RichUI:
         console.clear()
         console.print(Panel(self._HEADER_TEXT, expand=False))
 
-    def show_study_header(self) -> None:
-        """Study screen header: program name + description + key bindings."""
+    def show_study_header(self, mode: str = "LR") -> None:
+        """Study screen header: program name + description + mode + key bindings."""
+        if mode == "L":
+            mode_line = (
+                "[bold white]1: Listening mode[/bold white]  |  "
+                "[dim]2: Listen & Repeat mode[/dim]"
+            )
+            help_text = self._HELP_TEXT_L
+        else:
+            mode_line = (
+                "[dim]1: Listening mode[/dim]  |  "
+                "[bold white]2: Listen & Repeat mode[/bold white]"
+            )
+            help_text = self._HELP_TEXT_LR
         console.print(Panel(
-            self._HEADER_TEXT + "\n\n" + self._HELP_TEXT,
+            self._HEADER_TEXT + "\n\n" + mode_line + "\n\n" + help_text,
             expand=False,
         ))
 

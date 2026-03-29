@@ -23,8 +23,8 @@ def _suppress_stderr():
 
 class AudioPlayer(ABC):
     @abstractmethod
-    def play_segment(self, path: str, start: float, end: float, on_complete: Callable | None = None) -> None:
-        """Play audio from `start` to `end` seconds. on_complete called only on natural finish."""
+    def play_segment(self, path: str, start: float, end: float | None = None, on_complete: Callable | None = None) -> None:
+        """Play audio from `start` seconds. If end is None, play to end of file without stopping."""
 
     @abstractmethod
     def stop(self) -> None:
@@ -37,6 +37,10 @@ class AudioPlayer(ABC):
     @abstractmethod
     def is_playing(self) -> bool:
         """Return True if audio is currently playing (not paused, not stopped)."""
+
+    @abstractmethod
+    def get_position(self) -> float:
+        """Return current playback position in seconds from file start."""
 
 
 class PygameAudioPlayer(AudioPlayer):
@@ -51,21 +55,24 @@ class PygameAudioPlayer(AudioPlayer):
         self._remaining: float = 0.0
         self._play_start_time: float = 0.0
         self._on_complete: Callable | None = None
+        self._start_pos: float = 0.0
 
-    def play_segment(self, path: str, start: float, end: float, on_complete: Callable | None = None) -> None:
+    def play_segment(self, path: str, start: float, end: float | None = None, on_complete: Callable | None = None) -> None:
         self.stop()
         self._paused = False
         self._on_complete = on_complete
+        self._start_pos = start
         music = self._pygame.mixer.music
         with _suppress_stderr():
             music.load(path)
             music.play(start=start)
 
-        self._remaining = end - start
-        self._play_start_time = time.monotonic()
-        self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
-        self._stop_timer.daemon = True
-        self._stop_timer.start()
+        if end is not None:
+            self._remaining = end - start
+            self._play_start_time = time.monotonic()
+            self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
+            self._stop_timer.daemon = True
+            self._stop_timer.start()
 
     def _on_segment_end(self) -> None:
         self._pygame.mixer.music.stop()
@@ -77,13 +84,14 @@ class PygameAudioPlayer(AudioPlayer):
     def toggle_pause(self) -> None:
         music = self._pygame.mixer.music
         if self._paused:
-            # resume: restart timer with remaining time
+            # resume: restart timer with remaining time (only if a stop timer was in use)
             music.unpause()
             self._paused = False
             self._play_start_time = time.monotonic()
-            self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
-            self._stop_timer.daemon = True
-            self._stop_timer.start()
+            if self._remaining > 0:
+                self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
+                self._stop_timer.daemon = True
+                self._stop_timer.start()
         elif music.get_busy():
             # pause: cancel timer, save remaining time
             elapsed = time.monotonic() - self._play_start_time
@@ -96,6 +104,12 @@ class PygameAudioPlayer(AudioPlayer):
 
     def is_playing(self) -> bool:
         return self._pygame.mixer.music.get_busy() and not self._paused
+
+    def get_position(self) -> float:
+        pos_ms = self._pygame.mixer.music.get_pos()
+        if pos_ms < 0:
+            return self._start_pos
+        return self._start_pos + pos_ms / 1000
 
     def stop(self) -> None:
         if self._stop_timer is not None:
@@ -118,7 +132,7 @@ class VLCAudioPlayer(AudioPlayer):
         self._play_start_time: float = 0.0
         self._on_complete: Callable | None = None
 
-    def play_segment(self, path: str, start: float, end: float, on_complete: Callable | None = None) -> None:
+    def play_segment(self, path: str, start: float, end: float | None = None, on_complete: Callable | None = None) -> None:
         self.stop()
         self._on_complete = on_complete
 
@@ -128,11 +142,12 @@ class VLCAudioPlayer(AudioPlayer):
         self._player.play()
         self._player.set_time(int(start * 1000))
 
-        self._remaining = end - start
-        self._play_start_time = time.monotonic()
-        self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
-        self._stop_timer.daemon = True
-        self._stop_timer.start()
+        if end is not None:
+            self._remaining = end - start
+            self._play_start_time = time.monotonic()
+            self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
+            self._stop_timer.daemon = True
+            self._stop_timer.start()
 
     def _on_segment_end(self) -> None:
         self._player.stop()
@@ -143,12 +158,13 @@ class VLCAudioPlayer(AudioPlayer):
     def toggle_pause(self) -> None:
         import vlc
         if self._player.get_state() == vlc.State.Paused:
-            # resume: restart timer with remaining time
+            # resume: restart timer with remaining time (only if a stop timer was in use)
             self._player.pause()
             self._play_start_time = time.monotonic()
-            self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
-            self._stop_timer.daemon = True
-            self._stop_timer.start()
+            if self._remaining > 0:
+                self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
+                self._stop_timer.daemon = True
+                self._stop_timer.start()
         elif self._player.get_state() == vlc.State.Playing:
             # pause: cancel timer, save remaining time
             elapsed = time.monotonic() - self._play_start_time
@@ -161,6 +177,12 @@ class VLCAudioPlayer(AudioPlayer):
     def is_playing(self) -> bool:
         import vlc
         return self._player.get_state() == vlc.State.Playing
+
+    def get_position(self) -> float:
+        t = self._player.get_time()
+        if t < 0:
+            return 0.0
+        return t / 1000
 
     def stop(self) -> None:
         if self._stop_timer is not None:
