@@ -1,8 +1,24 @@
+import contextlib
+import os
 import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from pathlib import Path
+
+
+@contextlib.contextmanager
+def _suppress_stderr():
+    """Redirect fd 2 to /dev/null to suppress C-level stderr (e.g. mpg123 id3.c warnings)."""
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    saved_fd = os.dup(2)
+    os.dup2(devnull_fd, 2)
+    os.close(devnull_fd)
+    try:
+        yield
+    finally:
+        os.dup2(saved_fd, 2)
+        os.close(saved_fd)
 
 
 class AudioPlayer(ABC):
@@ -41,8 +57,9 @@ class PygameAudioPlayer(AudioPlayer):
         self._paused = False
         self._on_complete = on_complete
         music = self._pygame.mixer.music
-        music.load(path)
-        music.play(start=start)
+        with _suppress_stderr():
+            music.load(path)
+            music.play(start=start)
 
         self._remaining = end - start
         self._play_start_time = time.monotonic()
