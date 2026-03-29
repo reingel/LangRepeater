@@ -311,8 +311,12 @@ class AppController:
                     if self._mode != "L":
                         self._lr_mode_index = self.current_index
                         self._mode = "L"
+                        if self.player:
+                            self.player.stop()
+                        self._paused = False
+                        self._was_playing = False
+                        self._play_duration = 0.0
                         self._refresh_display()
-                        self._start_l_mode_playback()
                 elif action == Action.MODE_LISTEN_REPEAT:
                     if self._mode != "LR":
                         self._mode = "LR"
@@ -336,6 +340,8 @@ class AppController:
                     self._handle_l_page(1)
                 elif action == Action.STATS_PREV and self._mode == "L":
                     self._handle_l_page(-1)
+                elif action == Action.GOTO and self._mode == "L":
+                    self._handle_goto()
                 elif self._mode == "L":
                     pass  # L모드에서는 위 키 외 다른 키 무시
                 elif action == Action.RESTART:
@@ -547,7 +553,10 @@ class AppController:
             return
         self.current_index = raw - 1
         self._refresh_display()
-        self._play_current()
+        if self._mode == "L":
+            self._start_l_mode_playback()
+        else:
+            self._play_current()
 
     def _handle_split(self) -> None:
         if not self.subtitles:
