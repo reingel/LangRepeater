@@ -108,7 +108,7 @@ class RichUI:
                 console.print(f"[dim white]{sub.index:>4}  {display_text}[/dim white]")
 
     def show_home_menu(self, has_sessions: bool) -> str:
-        """Show home menu. Returns: 'resume'|'new'|'url'|'delete'|'quit'."""
+        """Show home menu. Returns: 'resume'|'new'|'url'|'url:<url>'|'delete'|'quit'."""
         console.print()
         n = 1
         if has_sessions:
@@ -127,6 +127,8 @@ class RichUI:
             raw = console.input(f"\nEnter number (1-{total}) or Q to quit: ").strip()
             if raw.lower() == "q":
                 return "quit"
+            if raw.startswith(("http://", "https://")):
+                return f"url:{raw}"
             if raw.isdigit():
                 val = int(raw)
                 idx = 1
@@ -245,12 +247,12 @@ class RichUI:
                 if 0 < pos < len(text) and pos not in positions:
                     positions.append(pos)
         # English: before and/or
-        for m in re.finditer(r'\b(and|or)\b', text, re.IGNORECASE):
+        for m in re.finditer(r'\b(and|or|but)\b', text, re.IGNORECASE):
             pos = m.start()
             if 0 < pos < len(text) and pos not in positions:
                 positions.append(pos)
         # English: before clause words
-        for m in re.finditer(r'\b(when|what|where|which|that)\b', text, re.IGNORECASE):
+        for m in re.finditer(r'\b(when|what|where|which|that|because|due to|however)\b', text, re.IGNORECASE):
             pos = m.start()
             if 0 < pos < len(text) and pos not in positions:
                 positions.append(pos)

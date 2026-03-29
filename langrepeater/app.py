@@ -95,8 +95,9 @@ class AppController:
                 self._load_subtitles()
                 self._init_player()
                 return True
-            if choice == "url":
-                if self._load_from_url():
+            if choice == "url" or choice.startswith("url:"):
+                url = choice[4:] if choice.startswith("url:") else None
+                if self._load_from_url(url=url):
                     return True
                 continue
             if choice == "delete":
@@ -128,10 +129,11 @@ class AppController:
             self.progress_store.delete(idx)
             self.ui.show_message("[dim]Session deleted.[/dim]")
 
-    def _load_from_url(self) -> bool:
+    def _load_from_url(self, url: str | None = None) -> bool:
         from .core import url_loader
 
-        url = self.ui.ask_path("Enter URL")
+        if url is None:
+            url = self.ui.ask_path("Enter URL")
         if not url or url.strip().lower() == "c":
             return False
 
