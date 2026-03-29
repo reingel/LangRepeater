@@ -58,7 +58,26 @@ LangRepeater
 
 ---
 
+## Modes
+
+### Listen & Repeat mode (default)
+
+Plays each segment in a loop. Use `Space` to play/pause, `S` to replay from the start, and `D`/`A` to navigate segments.
+
+### Listening mode
+
+Plays the entire file continuously from the current segment. Subtitles update automatically as playback progresses. Press `1` to enter, `2` to return to Listen & Repeat mode.
+
+---
+
 ## Keyboard Shortcuts
+
+### Mode
+
+| Action | Key |
+|---|---|
+| Listening mode | `1` |
+| Listen & Repeat mode | `2` |
 
 ### Playback
 
@@ -94,8 +113,10 @@ When splitting (`I`), candidate split points (punctuation or conjunctions) are h
 
 | Action | Key |
 |---|---|
-| Show / hide stats | `P` |
+| Segment stats (play count ranking) | `P` |
+| Date stats (daily activity) | `0` |
 | Next page | `]` |
 | Previous page | `[` |
+| Back to study | any other key |
 
-Stats show the top segments by play count, plus total learning time. Play counts are updated on merge/split.
+Segment stats show the top segments by play count plus total learning time. Date stats show daily segment/repeat counts and net play time. Play counts are updated on merge/split.
