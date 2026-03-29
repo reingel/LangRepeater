@@ -89,6 +89,7 @@ Plays the entire file continuously from the current segment. Subtitles update au
 | Previous segment | `A` / `←` / `↑` |
 | Skip forward 3 segments | `]` |
 | Skip backward 3 segments | `[` |
+| Go to segment by number | `G` |
 | Show / hide subtitle | `V` |
 | Quit | `Q` |
 | Home screen | `ESC` |
