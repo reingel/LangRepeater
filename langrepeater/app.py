@@ -352,6 +352,8 @@ class AppController:
                     self._handle_merge()
                 elif action == Action.SPLIT:
                     self._handle_split()
+                elif action == Action.GOTO:
+                    self._handle_goto()
                 elif action == Action.PRINT_STATS:
                     self._handle_print_stats()
                     self._showing_stats = True
@@ -529,6 +531,21 @@ class AppController:
         self._reindex_subtitles()
         self.stats_store.on_merge(self.media_path, cur_index, nxt_index, len(self.subtitles))
         self.srt_parser.save(self.srt_path, self.subtitles)
+        self._refresh_display()
+        self._play_current()
+
+    def _handle_goto(self) -> None:
+        if not self.subtitles:
+            return
+        termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
+        try:
+            raw = self.ui.ask_goto_number(len(self.subtitles))
+        finally:
+            tty.setcbreak(self._fd)
+        if raw is None:
+            self._refresh_display()
+            return
+        self.current_index = raw - 1
         self._refresh_display()
         self._play_current()
 

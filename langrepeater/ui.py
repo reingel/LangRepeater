@@ -11,18 +11,19 @@ console = Console()
 
 
 class RichUI:
+    _HELP_TEXT_L = (
+        "[dim]Space: play/pause      |  A/←/↑: prev         |  D/→/↓: next   |  [: prev 3  |  ]: next 3[/dim]\n"
+        "[dim]V: show/hide subtitle  |  Q: quit             |  ESC: home[/dim]"
+    )
     _HELP_TEXT_LR = (
-        "[dim]Space: play/pause  |  S: replay  |  A/←/↑: prev  |  D/→/↓: next  |  Q: quit[/dim]\n"
-        "[dim]Z: start -0.1s  |  X: start +0.1s  |  ,: end -0.1s  |  .: end +0.1s[/dim]\n"
-        "[dim]U: merge with next  |  I: split  |  V: show/hide subtitle[/dim]\n"
-        "[dim]P: segment stats  |  0: date stats  |  [: prev 3  |  ]: next 3  |  ESC: home[/dim]"
+        "[dim]Space: play/pause      |  A/←/↑: prev         |  D/→/↓: next   |  [: prev 3  |  ]: next 3[/dim]\n"
+        "[dim]V: show/hide subtitle  |  Q: quit             |  ESC: home[/dim]\n"
+        "[dim]S: replay  |  G: goto  |  U: merge with next  |  I: split[/dim]\n"
+        "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s  |  .: end +0.1s[/dim]\n"
+        "[dim]P: segment stats       |  0: date stats[/dim]"
     )
     _HELP_TEXT_STATS = (
         "[dim][: prev page  |  ]: next page  |  any key: back[/dim]"
-    )
-    _HELP_TEXT_L = (
-        "[dim]Space: play/pause  |  A/←/↑: prev  |  D/→/↓: next  |  [: prev 3  |  ]: next 3[/dim]\n"
-        "[dim]V: show/hide subtitle  |  Q: quit  |  ESC: home[/dim]"
     )
 
     def clear(self) -> None:
@@ -333,6 +334,18 @@ class RichUI:
     def ask_path(self, prompt: str) -> str | None:
         val = console.input(f"{prompt} (or C to cancel): ").strip()
         return None if val.lower() == "c" else val
+
+    def ask_goto_number(self, total: int) -> int | None:
+        """번호로 이동: 1~total 범위의 순번을 입력받아 반환. 취소 시 None."""
+        while True:
+            raw = console.input(f"Go to number (1-{total}, or C to cancel): ").strip()
+            if raw.lower() == "c":
+                return None
+            if raw.isdigit():
+                n = int(raw)
+                if 1 <= n <= total:
+                    return n
+            console.print(f"[red]Please enter a number between 1 and {total}.[/red]")
 
     def show_stats_header(self) -> None:
         """Stats screen header: program name + description + key bindings."""
