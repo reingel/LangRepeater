@@ -570,6 +570,7 @@ class AppController:
         progress_pct = (self.current_index + 1) / len(self.subtitles) * 100
         self._stats_page = 0
         self.ui.clear()
+        self.ui.show_stats_header()
         self.ui.show_learning_stats(
             self._stats_ranked, self._stats_sub_map, self._stats_total_seconds,
             self._stats_page, progress_pct,
@@ -584,6 +585,7 @@ class AppController:
         self._date_stats_page = 0
         progress_pct = (self.current_index + 1) / len(self.subtitles) * 100
         self.ui.clear()
+        self.ui.show_stats_header()
         self.ui.show_date_stats(self._date_stats_entries, sub_map, self._date_stats_page, progress_pct)
 
     def _handle_stats_page(self, direction: int) -> None:
@@ -600,6 +602,7 @@ class AppController:
                 return
             self._date_stats_page = new_page
             self.ui.clear()
+            self.ui.show_stats_header()
             self.ui.show_date_stats(
                 self._date_stats_entries, self._stats_sub_map, self._date_stats_page, progress_pct,
             )
@@ -616,6 +619,7 @@ class AppController:
             return
         self._stats_page = new_page
         self.ui.clear()
+        self.ui.show_stats_header()
         self.ui.show_learning_stats(
             self._stats_ranked, self._stats_sub_map, self._stats_total_seconds,
             self._stats_page, progress_pct,

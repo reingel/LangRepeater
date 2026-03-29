@@ -17,6 +17,9 @@ class RichUI:
         "[dim]U: merge with next  |  I: split  |  V: show/hide subtitle[/dim]\n"
         "[dim]P: segment stats  |  0: date stats  |  [: prev page  |  ]: next page  |  ESC: home[/dim]"
     )
+    _HELP_TEXT_STATS = (
+        "[dim][: prev page  |  ]: next page  |  any key: back[/dim]"
+    )
     _HELP_TEXT_L = (
         "[dim]Space: play/pause  |  A/←/↑: prev  |  D/→/↓: next[/dim]\n"
         "[dim]V: show/hide subtitle  |  Q: quit  |  ESC: home[/dim]"
@@ -331,6 +334,13 @@ class RichUI:
         val = console.input(f"{prompt} (or C to cancel): ").strip()
         return None if val.lower() == "c" else val
 
+    def show_stats_header(self) -> None:
+        """Stats screen header: program name + description + key bindings."""
+        console.print(Panel(
+            self._HEADER_TEXT + "\n\n" + self._HELP_TEXT_STATS,
+            expand=False,
+        ))
+
     def show_learning_stats(
         self,
         ranked: list[tuple[int, int]],
@@ -344,7 +354,7 @@ class RichUI:
         start = page * page_size
         end = min(start + page_size, total)
         entries = ranked[start:end]
-        console.print(f"\n[bold cyan]── Learning Statistics ──[/bold cyan]  [dim]Progress: {progress_pct:.1f}%[/dim]")
+        console.print(f"\n[bold cyan]── Learning Statistics ──[/bold cyan]  [dim]Progress: {progress_pct:.1f}%[/dim]\n")
         for rank, (idx, count) in enumerate(entries, start + 1):
             text = sub_map[idx].text if idx in sub_map else f"(subtitle {idx})"
             console.print(f"  [cyan]{rank:>2}[/cyan]. [bold]{count}x[/bold]  [dim]#{idx}[/dim]  {text}")
@@ -365,7 +375,7 @@ class RichUI:
         start = page * page_size
         end = min(start + page_size, total)
         page_entries = entries[start:end]
-        console.print(f"\n[bold cyan]── Date Statistics ──[/bold cyan]  [dim]Progress: {progress_pct:.1f}%[/dim]")
+        console.print(f"\n[bold cyan]── Date Statistics ──[/bold cyan]  [dim]Progress: {progress_pct:.1f}%[/dim]\n")
         # pre-compute seconds for all entries (for relative bar scaling)
         def _day_seconds(sc: dict[int, int]) -> float:
             return sum(
@@ -377,7 +387,7 @@ class RichUI:
         all_seconds = [_day_seconds(sc) for _, sc in entries]
         max_seconds = max(all_seconds) if all_seconds else 1.0
 
-        console.print(f"\n[bold white]              segments  repeats   net play time[/bold white]")
+        console.print(f"[bold white]              segments  repeats   net play time[/bold white]")
         for date_str, sc in page_entries:
             subtitle_count = len(sc)
             repeat_count = sum(sc.values())
