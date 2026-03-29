@@ -40,8 +40,15 @@ def transcribe(audio_path: str) -> str:
     os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
     import whisper
 
+    prompt = 'Transcribe the audio into well-formed, complete sentences. Use proper punctuation and ensure each sentence is clearly separated and ends correctly.'
+
     model = whisper.load_model("base")
-    result = model.transcribe(audio_path)
+    result = model.transcribe(
+        audio_path,
+        initial_prompt=prompt,
+        temperature=0.0,
+        condition_on_previous_text=True,
+    )
 
     # Group whisper segments into sentences by sentence-ending punctuation or max length.
     MAX_WORDS = 30

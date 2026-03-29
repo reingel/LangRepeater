@@ -21,6 +21,8 @@ class Action(Enum):
     STATS_NEXT = auto()
     STATS_PREV = auto()
     HOME = auto()
+    MODE_LISTENING = auto()
+    MODE_LISTEN_REPEAT = auto()
 
 
 _CHAR_MAP: dict[str, Action] = {
@@ -40,6 +42,8 @@ _CHAR_MAP: dict[str, Action] = {
     "0": Action.PRINT_DATE_STATS,
     "]": Action.STATS_NEXT,
     "[": Action.STATS_PREV,
+    "1": Action.MODE_LISTENING,
+    "2": Action.MODE_LISTEN_REPEAT,
 }
 
 
