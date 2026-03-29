@@ -18,7 +18,8 @@ class RichUI:
         "[dim]P: segment stats  |  0: date stats  |  [: prev page  |  ]: next page  |  ESC: home[/dim]"
     )
     _HELP_TEXT_L = (
-        "[dim]Space: play/pause  |  ESC: home  |  Q: quit[/dim]"
+        "[dim]Space: play/pause  |  A/←/↑: prev  |  D/→/↓: next[/dim]\n"
+        "[dim]V: show/hide subtitle  |  Q: quit  |  ESC: home[/dim]"
     )
 
     def clear(self) -> None:
