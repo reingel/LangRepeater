@@ -56,13 +56,6 @@ LangRepeater
 2. Select a media file (`.mp3` or `.mp4`) and a subtitle file (`.srt`), or enter a URL to download.
 3. The current, previous, and next subtitles are displayed. Subtitles are shown with middle words hidden — press `V` to reveal.
 
-### API Server only
-
-```bash
-LangRepeaterAPI          # http://localhost:8000
-# Interactive docs: http://localhost:8000/docs
-```
-
 ---
 
 ## Keyboard Shortcuts
@@ -106,11 +99,3 @@ When splitting (`I`), candidate split points (punctuation or conjunctions) are h
 | Previous page | `[` |
 
 Stats show the top segments by play count, plus total learning time. Play counts are updated on merge/split.
-
----
-
-## Development / Tests
-
-```bash
-pytest
-```
