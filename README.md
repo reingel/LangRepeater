@@ -84,9 +84,11 @@ Plays the entire file continuously from the current segment. Subtitles update au
 | Action | Key |
 |---|---|
 | Play / pause current segment | `Space` |
-| Replay from start | `S` |
+| Replay from start | `S` *(Listen & Repeat only)* |
 | Next segment | `D` / `→` / `↓` |
 | Previous segment | `A` / `←` / `↑` |
+| Skip forward 3 segments | `]` |
+| Skip backward 3 segments | `[` |
 | Show / hide subtitle | `V` |
 | Quit | `Q` |
 | Home screen | `ESC` |
@@ -119,4 +121,4 @@ When splitting (`I`), candidate split points (punctuation or conjunctions) are h
 | Previous page | `[` |
 | Back to study | any other key |
 
-Segment stats show the top segments by play count plus total learning time. Date stats show daily segment/repeat counts and net play time. Play counts are updated on merge/split.
+`]` / `[` navigate stats pages while a stats screen is open, and skip 3 segments at a time during normal playback. Segment stats show the top segments by play count plus total learning time. Date stats show daily segment/repeat counts and net play time. Play counts are updated on merge/split.

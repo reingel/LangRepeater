@@ -15,13 +15,13 @@ class RichUI:
         "[dim]Space: play/pause  |  S: replay  |  A/←/↑: prev  |  D/→/↓: next  |  Q: quit[/dim]\n"
         "[dim]Z: start -0.1s  |  X: start +0.1s  |  ,: end -0.1s  |  .: end +0.1s[/dim]\n"
         "[dim]U: merge with next  |  I: split  |  V: show/hide subtitle[/dim]\n"
-        "[dim]P: segment stats  |  0: date stats  |  [: prev page  |  ]: next page  |  ESC: home[/dim]"
+        "[dim]P: segment stats  |  0: date stats  |  [: prev 3  |  ]: next 3  |  ESC: home[/dim]"
     )
     _HELP_TEXT_STATS = (
         "[dim][: prev page  |  ]: next page  |  any key: back[/dim]"
     )
     _HELP_TEXT_L = (
-        "[dim]Space: play/pause  |  A/←/↑: prev  |  D/→/↓: next[/dim]\n"
+        "[dim]Space: play/pause  |  A/←/↑: prev  |  D/→/↓: next  |  [: prev 3  |  ]: next 3[/dim]\n"
         "[dim]V: show/hide subtitle  |  Q: quit  |  ESC: home[/dim]"
     )
 

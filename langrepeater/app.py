@@ -332,6 +332,10 @@ class AppController:
                 elif action == Action.TOGGLE_SUBTITLE:
                     self._subtitle_masked = not self._subtitle_masked
                     self._refresh_display()
+                elif action == Action.STATS_NEXT and self._mode == "L":
+                    self._handle_l_page(1)
+                elif action == Action.STATS_PREV and self._mode == "L":
+                    self._handle_l_page(-1)
                 elif self._mode == "L":
                     pass  # L모드에서는 위 키 외 다른 키 무시
                 elif action == Action.RESTART:
@@ -355,9 +359,9 @@ class AppController:
                     self._handle_print_date_stats()
                     self._showing_date_stats = True
                 elif action == Action.STATS_NEXT:
-                    self._handle_stats_page(1)
+                    self._handle_l_page(1)
                 elif action == Action.STATS_PREV:
-                    self._handle_stats_page(-1)
+                    self._handle_l_page(-1)
         finally:
             termios.tcflush(fd, termios.TCIFLUSH)
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -428,6 +432,19 @@ class AppController:
             self.player.stop()
         self._save_progress()
         self.ui.show_message("\n[dim]Progress saved. Exiting.[/dim]")
+
+    def _handle_l_page(self, direction: int) -> None:
+        """화면에 표시된 3문장 단위로 이동 (L/LR 공용)."""
+        if not self.subtitles:
+            return
+        new_index = max(0, min(len(self.subtitles) - 1, self.current_index + direction * 3))
+        if new_index != self.current_index:
+            self.current_index = new_index
+            self._refresh_display()
+            if self._mode == "L":
+                self._start_l_mode_playback()
+            else:
+                self._play_current()
 
     def _start_l_mode_playback(self) -> None:
         """L모드: 현재 자막 시작점부터 종료 타이머 없이 연속 재생."""
