@@ -18,7 +18,7 @@ class RichUI:
     _HELP_TEXT_LR = (
         "[dim]Space: play/pause      |  A/←/↑: prev         |  D/→/↓: next   |  [: prev 3  |  ]: next 3[/dim]\n"
         "[dim]V: show/hide subtitle  |  G: goto             |  Q: quit       |  ESC: home[/dim]\n"
-        "[dim]S: replay              |  U: merge with next  |  I: split[/dim]\n"
+        "[dim]S: replay              |  U: merge with next  |  I: split      |  T: transcribe[/dim]\n"
         "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s  |  .: end +0.1s[/dim]\n"
         "[dim]P: segment stats       |  0: date stats[/dim]"
     )
@@ -26,13 +26,15 @@ class RichUI:
         "[dim][: prev page  |  ]: next page  |  any key: back[/dim]"
     )
 
-    def clear(self) -> None:
-        console.clear()
-
     _HEADER_TEXT = (
         "[bold cyan]LangRepeater[/bold cyan]\n"
         "Audio segment repeater for language learning"
     )
+
+    _VISIBLE_PUNCT = frozenset(".,;:?!-")
+
+    def clear(self) -> None:
+        console.clear()
 
     def show_welcome(self) -> None:
         """Home screen header: clear screen, then program name + description."""
@@ -72,8 +74,6 @@ class RichUI:
                 if 1 <= n <= len(files):
                     return n - 1
             console.print("[red]Please enter a valid number.[/red]")
-
-    _VISIBLE_PUNCT = frozenset(".,;:?!-")
 
     @staticmethod
     def _mask_word(word: str) -> str:
@@ -346,6 +346,48 @@ class RichUI:
                 if 1 <= n <= total:
                     return n
             console.print(f"[red]Please enter a number between 1 and {total}.[/red]")
+
+    def show_transcribe_prompt(self, buf: list[str], init: bool = False) -> None:
+        """받아쓰기 입력 프롬프트 표시.
+        init=True: 힌트 줄 + 프롬프트 줄 새로 출력.
+        init=False: 현재 프롬프트 줄만 덮어쓰기.
+        """
+        typed = ''.join(buf)
+        if init:
+            sys.stdout.write(
+                "\n\033[2mTranscribe [Tab: play | Opt+V: show/hide subtitle | ESC: cancel]\033[0m\n"
+                f"> {typed}"
+            )
+        else:
+            sys.stdout.write(f"\r\033[K> {typed}")
+        sys.stdout.flush()
+
+    def show_transcribe_result(self, answer: str, user_input: str) -> None:
+        """사용자 입력 줄을 그 자리에서 컬러로 업데이트: 틀린 단어는 적색."""
+        # cbreak 모드에서는 echo가 꺼져 있으므로 Enter 후 커서는 여전히 prompt 줄에 있음
+        # 현재 줄(> typed)만 지우고 결과로 덮어쓰기
+        sys.stdout.write("\r\033[2K")
+        sys.stdout.flush()
+
+        answer_words = answer.split()
+        input_words = user_input.split()
+        max_len = max(len(answer_words), len(input_words))
+
+        line = Text("> ")
+        all_correct = True
+        for i in range(max_len):
+            a_word = answer_words[i] if i < len(answer_words) else ""
+            u_word = input_words[i] if i < len(input_words) else ""
+            match = a_word.lower().strip(".,;:?!") == u_word.lower().strip(".,;:?!")
+            if not match:
+                all_correct = False
+            if i > 0:
+                line.append(" ")
+            line.append(u_word if u_word else "___", style="bold green" if match else "bold red")
+        if all_correct:
+            line.append("  👍")
+
+        console.print(line)
 
     def show_stats_header(self) -> None:
         """Stats screen header: program name + description + key bindings."""

@@ -1,3 +1,5 @@
+import os
+import select
 import sys
 import termios
 import time
@@ -53,6 +55,7 @@ class AppController:
         self._was_playing: bool = False
         self._mode: str = "LR"  # "L" = Listening mode, "LR" = Listen & Repeat mode
         self._lr_mode_index: int = 0  # LR모드 복귀 시 돌아갈 자막 인덱스
+        self._showing_transcribe_result: bool = False
 
     def run(self) -> None:
         while True:
@@ -256,7 +259,7 @@ class AppController:
             while running:
                 action = read_action(fd, timeout=0.1)
                 if action is None:
-                    if not self._showing_stats and not self._showing_date_stats:
+                    if not self._showing_stats and not self._showing_date_stats and not self._showing_transcribe_result:
                         is_playing = self.player is not None and self.player.is_playing()
                         if self._mode == "L" and self.subtitles:
                             if is_playing:
@@ -281,6 +284,8 @@ class AppController:
                                 self.ui.update_animation_line(1.0, dim=True)
                         self._was_playing = is_playing
                     continue
+
+                self._showing_transcribe_result = False
 
                 if self._showing_stats or self._showing_date_stats:
                     if action == Action.QUIT:
@@ -319,13 +324,15 @@ class AppController:
                         self._refresh_display()
                 elif action == Action.MODE_LISTEN_REPEAT:
                     if self._mode != "LR":
+                        prev_mode = self._mode
                         self._mode = "LR"
                         if self.player:
                             self.player.stop()
                         self._paused = False
                         self._was_playing = False
                         self._play_duration = 0.0
-                        self.current_index = self._lr_mode_index
+                        if prev_mode == "L":
+                            self.current_index = self._lr_mode_index
                         self._refresh_display()
                 elif action == Action.PLAY:
                     self._handle_play()
@@ -344,6 +351,8 @@ class AppController:
                     self._handle_goto()
                 elif self._mode == "L":
                     pass  # L모드에서는 위 키 외 다른 키 무시
+                elif action == Action.TRANSCRIBE:
+                    self._handle_transcribe()
                 elif action == Action.RESTART:
                     self._handle_restart()
                 elif action == Action.SHIFT_START_EARLIER:
@@ -392,6 +401,7 @@ class AppController:
             self._paused = False
             self._play_start_time += time.monotonic() - self._paused_at
         else:
+            self._refresh_display()
             if self._mode == "L":
                 self._start_l_mode_playback()
             else:
@@ -399,6 +409,7 @@ class AppController:
 
     def _handle_restart(self) -> None:
         # S: always restart segment from beginning (LR mode only)
+        self._refresh_display()
         self._play_current()
 
     def _handle_next(self) -> None:
@@ -590,6 +601,55 @@ class AppController:
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
         self._play_current()
+
+    def _handle_transcribe(self) -> None:
+        if not self.subtitles:
+            return
+        sub = self.subtitles[self.current_index]
+        # cbreak 모드 유지 - 입력 중 단축키(Option+key) 처리를 위해 직접 읽기
+        buf: list[str] = []
+        self.ui.show_transcribe_prompt(buf, init=True)
+
+        while True:
+            rlist, _, _ = select.select([self._fd], [], [], 0.1)
+            if not rlist:
+                continue
+            ch = os.read(self._fd, 1)
+
+            if ch in (b'\r', b'\n'):  # Enter → 제출
+                break
+            elif ch == b'\t':  # Tab → 처음부터 다시 재생
+                self._refresh_display()
+                self._play_current()
+                self.ui.show_transcribe_prompt(buf, init=True)
+            elif ch == b'\x1b':  # ESC 또는 Option+key
+                rlist2, _, _ = select.select([self._fd], [], [], 0.05)
+                if rlist2:
+                    ch2 = os.read(self._fd, 1)
+                    if ch2 == b'v':     # Option+V → 자막 보이기/감추기
+                        self._subtitle_masked = not self._subtitle_masked
+                        self._refresh_display()
+                    self.ui.show_transcribe_prompt(buf, init=True)
+                else:
+                    # 단독 ESC → 취소
+                    self._refresh_display()
+                    return
+            elif ch in (b'\x7f', b'\x08'):  # Backspace
+                if buf:
+                    buf.pop()
+                    self.ui.show_transcribe_prompt(buf)
+            else:
+                char = ch.decode('utf-8', errors='ignore')
+                if char.isprintable():
+                    buf.append(char)
+                    self.ui.show_transcribe_prompt(buf)
+
+        user_input = ''.join(buf).strip()
+        if not user_input:
+            self._refresh_display()
+            return
+        self._showing_transcribe_result = True
+        self.ui.show_transcribe_result(sub.text, user_input)
 
     def _reindex_subtitles(self) -> None:
         for i, sub in enumerate(self.subtitles):
