@@ -272,7 +272,7 @@ class RichUI:
             if 0 < pos < len(text) and pos not in positions:
                 positions.append(pos)
         # English: before clause words
-        for m in re.finditer(r'\b(when|what|where|which|that|because|due to|however)\b', text, re.IGNORECASE):
+        for m in re.finditer(r'\b(when|what|where|which|that|because|due to|however|until|if)\b', text, re.IGNORECASE):
             pos = m.start()
             if 0 < pos < len(text) and pos not in positions:
                 positions.append(pos)
