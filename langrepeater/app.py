@@ -574,12 +574,7 @@ class AppController:
             return
         sub = self.subtitles[self.current_index]
         sub_index = sub.index
-        # temporarily restore terminal for interactive input
-        termios.tcsetattr(self._fd, termios.TCSADRAIN, self._old_settings)
-        try:
-            split_pos = self.ui.ask_split_point(sub)
-        finally:
-            tty.setcbreak(self._fd)
+        split_pos = self.ui.ask_split_point(sub, self._fd)
         if split_pos is None:
             self._refresh_display()
             return

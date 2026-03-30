@@ -254,8 +254,9 @@ class RichUI:
                 return path
             console.print("[red]Please enter 1 or 2.[/red]")
 
-    def ask_split_point(self, subtitle) -> int | None:
+    def ask_split_point(self, subtitle, fd: int) -> int | None:
         """Show split point candidates. Returns char position or None to cancel."""
+        import os
         import re
         text = subtitle.text
         # Find candidate split positions
@@ -294,15 +295,15 @@ class RichUI:
             prev = pos
         line.append(text[prev:])
         console.print(line)
+        console.print(f"\n[dim]Press 1-{len(positions)} to split, or ESC to cancel[/dim]")
         while True:
-            raw = console.input(f"\nEnter number (1-{len(positions)}) or C to cancel: ").strip()
-            if raw.lower() == "c":
+            ch = os.read(fd, 1).decode("utf-8", errors="ignore")
+            if ch.lower() == "\x1b":
                 return None
-            if raw.isdigit():
-                n = int(raw)
+            if ch.isdigit():
+                n = int(ch)
                 if 1 <= n <= len(positions):
                     return positions[n - 1]
-            console.print("[red]Please enter a valid number.[/red]")
 
     @staticmethod
     def _make_animation_bar(progress: float, width: int = 20) -> str:
