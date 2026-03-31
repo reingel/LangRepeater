@@ -55,7 +55,6 @@ class AppController:
         self._was_playing: bool = False
         self._mode: str = "LR"  # "L" = Listening mode, "LR" = Listen & Repeat mode
         self._lr_mode_index: int = 0  # LR모드 복귀 시 돌아갈 자막 인덱스
-        self._showing_transcribe_result: bool = False
 
     def run(self) -> None:
         while True:
@@ -259,7 +258,7 @@ class AppController:
             while running:
                 action = read_action(fd, timeout=0.1)
                 if action is None:
-                    if not self._showing_stats and not self._showing_date_stats and not self._showing_transcribe_result:
+                    if not self._showing_stats and not self._showing_date_stats:
                         is_playing = self.player is not None and self.player.is_playing()
                         if self._mode == "L" and self.subtitles:
                             if is_playing:
@@ -284,8 +283,6 @@ class AppController:
                                 self.ui.update_animation_line(1.0, dim=True)
                         self._was_playing = is_playing
                     continue
-
-                self._showing_transcribe_result = False
 
                 if self._showing_stats or self._showing_date_stats:
                     if action == Action.QUIT:
@@ -603,7 +600,8 @@ class AppController:
         sub = self.subtitles[self.current_index]
         # cbreak 모드 유지 - 입력 중 단축키(Option+key) 처리를 위해 직접 읽기
         buf: list[str] = []
-        self.ui.show_transcribe_prompt(buf, init=True)
+        cursor_pos: int = 0
+        self.ui.show_transcribe_prompt(buf, cursor_pos, init=True)
 
         while True:
             rlist, _, _ = select.select([self._fd], [], [], 0.1)
@@ -616,35 +614,105 @@ class AppController:
             elif ch == b'\t':  # Tab → 처음부터 다시 재생
                 self._refresh_display()
                 self._play_current()
-                self.ui.show_transcribe_prompt(buf, init=True)
-            elif ch == b'\x1b':  # ESC 또는 Option+key
+                self.ui.show_transcribe_prompt(buf, cursor_pos, init=True)
+            elif ch == b'\x1b':  # ESC 또는 escape sequence
                 rlist2, _, _ = select.select([self._fd], [], [], 0.05)
-                if rlist2:
-                    ch2 = os.read(self._fd, 1)
-                    if ch2 == b'v':     # Option+V → 자막 보이기/감추기
-                        self._subtitle_masked = not self._subtitle_masked
-                        self._refresh_display()
-                    self.ui.show_transcribe_prompt(buf, init=True)
-                else:
+                if not rlist2:
                     # 단독 ESC → 취소
                     self._refresh_display()
                     return
+                ch2 = os.read(self._fd, 1)
+                if ch2 == b'[':  # CSI sequence (화살표 키 등)
+                    seq = b''
+                    while True:
+                        r3, _, _ = select.select([self._fd], [], [], 0.05)
+                        if not r3:
+                            break
+                        ch3 = os.read(self._fd, 1)
+                        seq += ch3
+                        if 0x40 <= ch3[0] <= 0x7e:  # CSI final byte
+                            break
+                    if seq == b'D':  # ← 왼쪽 화살표
+                        cursor_pos = max(0, cursor_pos - 1)
+                        self.ui.show_transcribe_prompt(buf, cursor_pos)
+                    elif seq == b'C':  # → 오른쪽 화살표
+                        cursor_pos = min(len(buf), cursor_pos + 1)
+                        self.ui.show_transcribe_prompt(buf, cursor_pos)
+                    elif seq in (b'1;3D', b'1;9D'):  # Opt+← 단어 왼쪽
+                        while cursor_pos > 0 and buf[cursor_pos - 1] == ' ':
+                            cursor_pos -= 1
+                        while cursor_pos > 0 and buf[cursor_pos - 1] != ' ':
+                            cursor_pos -= 1
+                        self.ui.show_transcribe_prompt(buf, cursor_pos)
+                    elif seq in (b'1;3C', b'1;9C'):  # Opt+→ 단어 오른쪽
+                        while cursor_pos < len(buf) and buf[cursor_pos] == ' ':
+                            cursor_pos += 1
+                        while cursor_pos < len(buf) and buf[cursor_pos] != ' ':
+                            cursor_pos += 1
+                        self.ui.show_transcribe_prompt(buf, cursor_pos)
+                elif ch2 == b'b':  # Opt+← (emacs 스타일)
+                    while cursor_pos > 0 and buf[cursor_pos - 1] == ' ':
+                        cursor_pos -= 1
+                    while cursor_pos > 0 and buf[cursor_pos - 1] != ' ':
+                        cursor_pos -= 1
+                    self.ui.show_transcribe_prompt(buf, cursor_pos)
+                elif ch2 == b'f':  # Opt+→ (emacs 스타일)
+                    while cursor_pos < len(buf) and buf[cursor_pos] == ' ':
+                        cursor_pos += 1
+                    while cursor_pos < len(buf) and buf[cursor_pos] != ' ':
+                        cursor_pos += 1
+                    self.ui.show_transcribe_prompt(buf, cursor_pos)
+                elif ch2 == b'v':  # Opt+V → 자막 보이기/감추기
+                    self._subtitle_masked = not self._subtitle_masked
+                    self._refresh_display()
+                    self.ui.show_transcribe_prompt(buf, cursor_pos, init=True)
+                # 그 외 escape sequence → 무시
             elif ch in (b'\x7f', b'\x08'):  # Backspace
-                if buf:
-                    buf.pop()
-                    self.ui.show_transcribe_prompt(buf)
+                if cursor_pos > 0:
+                    buf.pop(cursor_pos - 1)
+                    cursor_pos -= 1
+                    self.ui.show_transcribe_prompt(buf, cursor_pos)
             else:
                 char = ch.decode('utf-8', errors='ignore')
                 if char.isprintable():
-                    buf.append(char)
-                    self.ui.show_transcribe_prompt(buf)
+                    buf.insert(cursor_pos, char)
+                    cursor_pos += 1
+                    self.ui.show_transcribe_prompt(buf, cursor_pos)
 
         user_input = ''.join(buf).strip()
         if not user_input:
             self._refresh_display()
             return
-        self._showing_transcribe_result = True
         self.ui.show_transcribe_result(sub.text, user_input)
+
+        # 결과 표시 후 Tab(재생), Opt+V(자막 토글) 처리 루프
+        while True:
+            rlist, _, _ = select.select([self._fd], [], [], 0.1)
+            if not rlist:
+                continue
+            ch = os.read(self._fd, 1)
+            if ch == b'\t':  # Tab → 다시 재생
+                self._refresh_display()
+                self._play_current()
+                self.ui.show_transcribe_prompt(buf, len(buf), init=True)
+                self.ui.show_transcribe_result(sub.text, user_input)
+            elif ch in (b'\r', b'\n', b'\x1b'):  # Enter / ESC → 종료
+                if ch == b'\x1b':
+                    rlist2, _, _ = select.select([self._fd], [], [], 0.05)
+                    if rlist2:
+                        ch2 = os.read(self._fd, 1)
+                        if ch2 == b'v':  # Opt+V → 자막 보이기/감추기
+                            self._subtitle_masked = not self._subtitle_masked
+                            self._refresh_display()
+                            self.ui.show_transcribe_prompt(buf, len(buf), init=True)
+                            self.ui.show_transcribe_result(sub.text, user_input)
+                            continue
+                        # 다른 Opt+key → 무시
+                        continue
+                self._refresh_display()
+                return
+            else:
+                pass  # 다른 키 → 무시
 
     def _reindex_subtitles(self) -> None:
         for i, sub in enumerate(self.subtitles):
