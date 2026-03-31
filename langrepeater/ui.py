@@ -443,7 +443,9 @@ class RichUI:
         all_seconds = [_day_seconds(sc) for _, sc in entries]
         max_seconds = max(all_seconds) if all_seconds else 1.0
 
-        console.print(f"[bold white]              segments  repeats   net play time[/bold white]")
+        from datetime import date as _date
+        today_str = _date.today().strftime("%Y-%m-%d")
+        console.print(f"[bold white]                segments  repeats   net play time[/bold white]")
         for date_str, sc in page_entries:
             subtitle_count = len(sc)
             repeat_count = sum(sc.values())
@@ -453,7 +455,8 @@ class RichUI:
             time_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
             filled = round(total_seconds / max_seconds * 20) if max_seconds > 0 else 0
             bar = "█" * filled + "░" * (20 - filled)
-            console.print(f"  [cyan]{date_str}[/cyan][white]  {subtitle_count:>6}   {repeat_count:>6}     {time_str:>11}  {bar}")
+            marker = "[yellow]▶[/yellow]" if date_str == today_str else " "
+            console.print(f"{marker} [cyan]{date_str}[/cyan][white]  {subtitle_count:>6}   {repeat_count:>6}     {time_str:>11}  {bar}")
         page_count = max(1, -(-total // page_size))
         console.print(f"\n[dim]Page {page + 1}/{page_count}[/dim]")
 
