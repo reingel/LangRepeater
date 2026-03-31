@@ -404,6 +404,7 @@ class RichUI:
         total_seconds: float,
         page: int,
         progress_pct: float = 0.0,
+        current_sub_index: int = -1,
     ) -> None:
         page_size = 10
         total = len(ranked)
@@ -411,9 +412,11 @@ class RichUI:
         end = min(start + page_size, total)
         entries = ranked[start:end]
         console.print(f"\n[bold cyan]── Learning Statistics ──[/bold cyan]  [dim]Progress: {progress_pct:.1f}%[/dim]\n")
-        for rank, (idx, count) in enumerate(entries, start + 1):
+        console.print(f"[bold white]     # repeats  sentence[/bold white]")
+        for idx, count in entries:
             text = sub_map[idx].text if idx in sub_map else f"(subtitle {idx})"
-            console.print(f"  [cyan]{rank:>2}[/cyan]. [bold]{count}x[/bold]  [dim]#{idx}[/dim]  {text}")
+            marker = "[yellow]▶[/yellow]" if idx == current_sub_index else " "
+            console.print(f"{marker} [white dim]{idx:>4}[/white dim]  [bold cyan]{count:>4}x[/bold cyan]   [bold white]{text}[/bold white]")
         hours, rem = divmod(int(total_seconds), 3600)
         minutes, seconds = divmod(rem, 60)
         time_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
@@ -445,7 +448,7 @@ class RichUI:
 
         from datetime import date as _date
         today_str = _date.today().strftime("%Y-%m-%d")
-        console.print(f"[bold white]                segments  repeats   net play time[/bold white]")
+        console.print(f"[bold white]               segments  repeats   net play time[/bold white]")
         for date_str, sc in page_entries:
             subtitle_count = len(sc)
             repeat_count = sum(sc.values())
