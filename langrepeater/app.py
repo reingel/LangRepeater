@@ -657,8 +657,7 @@ class AppController:
         self._stats_sub_map = {sub.index: sub for sub in self.subtitles}
         self._stats_ranked = sorted(
             stats.subtitle_play_counts.items(),
-            key=lambda x: x[1],
-            reverse=True,
+            key=lambda x: x[0],  # 자막 순번 오름차순
         )
         self._stats_total_seconds = sum(
             (self._stats_sub_map[idx].end - self._stats_sub_map[idx].start) * count
@@ -666,12 +665,18 @@ class AppController:
             if idx in self._stats_sub_map
         )
         progress_pct = (self.current_index + 1) / len(self.subtitles) * 100
-        self._stats_page = 0
+        # 현재 학습 중인 자막 순번에 가장 가까운 위치의 페이지로 이동
+        import bisect
+        current_sub_index = self.subtitles[self.current_index].index
+        ranked_indices = [idx for idx, _ in self._stats_ranked]
+        pos = bisect.bisect_right(ranked_indices, current_sub_index) - 1
+        self._stats_page = max(0, pos) // 10
         self.ui.clear()
         self.ui.show_stats_header()
         self.ui.show_learning_stats(
             self._stats_ranked, self._stats_sub_map, self._stats_total_seconds,
             self._stats_page, progress_pct,
+            current_sub_index=self.subtitles[self.current_index].index,
         )
 
     def _handle_print_date_stats(self) -> None:
@@ -721,6 +726,7 @@ class AppController:
         self.ui.show_learning_stats(
             self._stats_ranked, self._stats_sub_map, self._stats_total_seconds,
             self._stats_page, progress_pct,
+            current_sub_index=self.subtitles[self.current_index].index,
         )
 
     def _refresh_display(self) -> None:
