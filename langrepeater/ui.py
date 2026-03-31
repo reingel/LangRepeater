@@ -357,7 +357,7 @@ class RichUI:
         typed = ''.join(buf)
         if init:
             sys.stdout.write(
-                "\n\033[2mTranscribe [Tab: play | Opt+V: show/hide subtitle | ←/→: move | Opt+←/→: word | ESC/Enter: return]\033[0m\n"
+                "\n\033[2mTranscribe [Tab: play | Opt+V: show/hide subtitle | ESC/Enter: return]\033[0m\n"
                 f"> {typed}"
             )
         else:
