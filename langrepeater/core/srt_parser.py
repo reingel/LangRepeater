@@ -1,4 +1,5 @@
 import datetime
+import json
 import re
 from pathlib import Path
 
@@ -29,13 +30,18 @@ def _words_yaml_path(srt_path: str) -> Path:
     return Path(srt_path).with_name(Path(srt_path).stem + "-words.yaml")
 
 
+def _words_json_path(srt_path: str) -> Path:
+    p = Path(srt_path)
+    return p.parent / (p.stem + ".mp3.json")
+
+
 def _word_srt_path(srt_path: str) -> Path:
     p = Path(srt_path)
     return p.with_name(p.stem + "-word" + p.suffix)
 
 
 class SRTParser:
-    _MARGIN = 0.1  # seconds of padding added to each sentence boundary
+    _MARGIN = -0.3  # seconds of padding added to each sentence boundary
 
     def save(self, path: str, subtitles: list[Subtitle]) -> None:
         srt_subtitles = [
@@ -52,6 +58,12 @@ class SRTParser:
 
     def load(self, path: str) -> list[Subtitle]:
         if not Path(path).exists():
+            json_path = _words_json_path(path)
+            if json_path.exists():
+                all_wts = self.load_words_json(path)
+                subtitles = self.subtitles_from_words(all_wts)
+                self.save(path, subtitles)
+                return subtitles
             yaml_path = _words_yaml_path(path)
             if yaml_path.exists():
                 all_wts = self.load_words_yaml(path)
@@ -191,3 +203,22 @@ class SRTParser:
             WordTimestamp(word=w["word"], start=w["start"], end=w["end"])
             for w in data
         ]
+
+    def load_words_json(self, srt_path: str) -> list[WordTimestamp]:
+        """Load flat word list from whisper-cli JSON ({stem}.mp3.json). Returns [] if not found."""
+        json_path = _words_json_path(srt_path)
+        if not json_path.exists():
+            return []
+        with open(json_path, encoding="utf-8") as f:
+            data = json.load(f)
+        result: list[WordTimestamp] = []
+        for seg in data.get("transcription", []):
+            text = seg.get("text", "")
+            stripped = text.strip().strip('"')
+            if not stripped or stripped.startswith("["):
+                continue
+            offsets = seg.get("offsets", {})
+            start = offsets.get("from", 0) / 1000.0
+            end = offsets.get("to", 0) / 1000.0
+            result.append(WordTimestamp(word=stripped, start=start, end=end))
+        return result

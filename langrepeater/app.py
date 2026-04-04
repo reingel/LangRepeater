@@ -11,7 +11,7 @@ from .core.file_finder import FileFinder
 from .core.models import Session, Subtitle
 from .core.progress_store import ProgressStore
 from .core.stats_store import StatsStore
-from .core.srt_parser import SRTParser, _words_yaml_path
+from .core.srt_parser import SRTParser, _words_json_path, _words_yaml_path
 from .keyboard_handler import Action, read_action
 from .ui import RichUI
 
@@ -87,10 +87,10 @@ class AppController:
                     self.srt_path = session.srt_path
                 else:
                     srt_candidate = str(Path(session.media_path).with_suffix(".srt"))
-                    if Path(srt_candidate).exists() or _words_yaml_path(srt_candidate).exists():
+                    if Path(srt_candidate).exists() or _words_json_path(srt_candidate).exists() or _words_yaml_path(srt_candidate).exists():
                         self.srt_path = srt_candidate
                     else:
-                        self.ui.show_message("[dim]SRT file not found. Transcribing with stable-ts...[/dim]")
+                        self.ui.show_message("[dim]SRT file not found. Transcribing with whisper-cli...[/dim]")
                         from .core import url_loader
                         try:
                             self.srt_path = url_loader.transcribe(session.media_path)
@@ -181,10 +181,10 @@ class AppController:
 
         self.media_path = media_path
         srt_candidate = str(Path(media_path).with_suffix(".srt"))
-        if Path(srt_candidate).exists() or _words_yaml_path(srt_candidate).exists():
+        if Path(srt_candidate).exists() or _words_json_path(srt_candidate).exists() or _words_yaml_path(srt_candidate).exists():
             self.srt_path = srt_candidate
         else:
-            self.ui.show_message("[dim]No matching srt file found. Transcribing with stable-ts...[/dim]")
+            self.ui.show_message("[dim]No matching srt file found. Transcribing with whisper-cli...[/dim]")
             try:
                 self.srt_path = url_loader.transcribe(media_path)
             except Exception as e:
@@ -217,12 +217,12 @@ class AppController:
             return False
         self.media_path = media_files[idx]
 
-        # select srt file: use same-name srt (or words yaml) if exists, else transcribe
+        # select srt file: use same-name srt (or words json/yaml) if exists, else transcribe
         srt_candidate = str(Path(self.media_path).with_suffix(".srt"))
-        if Path(srt_candidate).exists() or _words_yaml_path(srt_candidate).exists():
+        if Path(srt_candidate).exists() or _words_json_path(srt_candidate).exists() or _words_yaml_path(srt_candidate).exists():
             self.srt_path = srt_candidate
         else:
-            self.ui.show_message("[dim]No matching srt file found. Transcribing with stable-ts...[/dim]")
+            self.ui.show_message("[dim]No matching srt file found. Transcribing with whisper-cli...[/dim]")
             from .core import url_loader
             try:
                 self.srt_path = url_loader.transcribe(self.media_path)
@@ -237,7 +237,7 @@ class AppController:
 
     def _load_subtitles(self) -> None:
         self.subtitles = self.srt_parser.load(self.srt_path)
-        self.all_word_timestamps = self.srt_parser.load_words_yaml(self.srt_path)
+        self.all_word_timestamps = self.srt_parser.load_words_json(self.srt_path) or self.srt_parser.load_words_yaml(self.srt_path)
 
     def _init_player(self) -> None:
         self.player = create_player(self.media_path)
@@ -599,7 +599,7 @@ class AppController:
         Falls back to proportional estimate if word list is unavailable.
         """
         from .core.srt_parser import SRTParser
-        margin = SRTParser._MARGIN
+        margin = 0.0
 
         all_wts = self.all_word_timestamps
         text = sub.text

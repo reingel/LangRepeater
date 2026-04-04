@@ -33,24 +33,31 @@ def download(url: str, output_dir: str) -> str:
 
 
 def transcribe(audio_path: str) -> str:
-    """Generate word-level SRT from audio using stable-ts.
+    """Generate word-level JSON from audio using whisper-cli.
 
-    Uses: stable-ts input.mp3 -o input.srt --mel_first --regroup True
-    The resulting SRT uses <font color=...> tags to highlight each word
-    in sequence, which SRTParser converts into sentence-grouped Subtitles.
+    Uses: whisper-cli -m models/ggml-small.bin -f input.mp3
+          --output-json-full --split-on-word --max-len 1 --dtw tiny
 
-    Returns the path to the generated SRT file.
+    Returns the srt_path (not yet generated; SRTParser.load() will build it from JSON).
     """
     import subprocess
 
-    srt_path = str(Path(audio_path).with_suffix(".srt"))
+    model_path = Path(__file__).parents[2] / "models" / "ggml-small.bin"
     result = subprocess.run(
-        ["stable-ts", audio_path, "-o", srt_path, "--mel_first", "--regroup", "True"],
-        capture_output=True, text=True,
+        [
+            "whisper-cli",
+            "-m", str(model_path),
+            "-f", audio_path,
+            "--output-json-full",
+            "--split-on-word",
+            "--max-len", "1",
+            "--dtw", "tiny",
+        ],
+        cwd=str(Path(audio_path).parent),
     )
     if result.returncode != 0:
-        raise RuntimeError(f"stable-ts failed: {result.stderr}")
-    return srt_path
+        raise RuntimeError("whisper-cli failed")
+    return str(Path(audio_path).with_suffix(".srt"))
 
 
 def extract_audio(mp4_path: str) -> str:
