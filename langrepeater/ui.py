@@ -118,7 +118,7 @@ class RichUI:
             sub = subtitles[idx]
             display_text = self._mask_text(sub.text) if masked else sub.text
             if idx == current_index:
-                ts = f"[{sub.start:.1f}s ~ {sub.end:.1f}s]"
+                ts = f"[{sub.start:.2f}s ~ {sub.end:.2f}s]"
                 line = Text()
                 line.append(f"{sub.index:>4}  ", style="dim bold cyan")
                 line.append(display_text, style="bold white")
@@ -273,7 +273,7 @@ class RichUI:
             if 0 < pos < len(text) and pos not in positions:
                 positions.append(pos)
         # English: before clause words
-        for m in re.finditer(r'\b(when|what|where|which|that|because|due to|however|until|if)\b', text, re.IGNORECASE):
+        for m in re.finditer(r'\b(when|what|where|which|that|because|due to|however|until|if|so)\b', text, re.IGNORECASE):
             pos = m.start()
             if 0 < pos < len(text) and pos not in positions:
                 positions.append(pos)
