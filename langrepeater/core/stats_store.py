@@ -94,6 +94,7 @@ class StatsStore:
         stats.subtitle_play_counts = new_counts
         stats.total_play_count = sum(new_counts.values())
         self.save(stats)
+        self._reindex_date_stats_merge(media_path, cur_index, nxt_index, new_total)
 
     def on_split(self, media_path: str, sub_index: int, new_total: int) -> None:
         """Update stats after splitting a subtitle (1-based index)."""
@@ -117,6 +118,7 @@ class StatsStore:
         stats.subtitle_play_counts = new_counts
         stats.total_play_count = sum(new_counts.values())
         self.save(stats)
+        self._reindex_date_stats_split(media_path, sub_index, new_total)
 
     # ------------------------------------------------------------------
     # Date stats (stat-date.yaml)
@@ -142,6 +144,56 @@ class StatsStore:
         day_entry["total_play_count"] = day_entry.get("total_play_count", 0) + 1
         sc = day_entry.setdefault("subtitle_play_counts", {})
         sc[subtitle_index] = sc.get(subtitle_index, 0) + 1
+        self._save_date_raw(raw)
+
+    def _reindex_date_stats_merge(self, media_path: str, cur_index: int, nxt_index: int, new_total: int) -> None:
+        raw = self._load_date_raw()
+        media_entry = raw.get(media_path)
+        if not media_entry:
+            return
+        for day_entry in media_entry.values():
+            sc: dict = day_entry.get("subtitle_play_counts", {})
+            merged = sc.get(cur_index, 0) + sc.get(nxt_index, 0)
+            new_sc: dict[int, int] = {}
+            for idx, count in sc.items():
+                idx = int(idx)
+                if idx < cur_index:
+                    new_sc[idx] = count
+                elif idx == cur_index:
+                    if merged:
+                        new_sc[idx] = merged
+                elif idx == nxt_index:
+                    pass
+                else:
+                    new_sc[idx - 1] = count
+            day_entry["subtitle_play_counts"] = {k: v for k, v in new_sc.items() if v > 0 and k <= new_total}
+            day_entry["total_play_count"] = sum(day_entry["subtitle_play_counts"].values())
+        self._save_date_raw(raw)
+
+    def _reindex_date_stats_split(self, media_path: str, sub_index: int, new_total: int) -> None:
+        raw = self._load_date_raw()
+        media_entry = raw.get(media_path)
+        if not media_entry:
+            return
+        for day_entry in media_entry.values():
+            sc: dict = day_entry.get("subtitle_play_counts", {})
+            original = sc.get(sub_index, 0)
+            front = (original + 1) // 2
+            back = original // 2
+            new_sc: dict[int, int] = {}
+            for idx, count in sc.items():
+                idx = int(idx)
+                if idx < sub_index:
+                    new_sc[idx] = count
+                elif idx == sub_index:
+                    if front:
+                        new_sc[idx] = front
+                else:
+                    new_sc[idx + 1] = count
+            if back:
+                new_sc[sub_index + 1] = new_sc.get(sub_index + 1, 0) + back
+            day_entry["subtitle_play_counts"] = {k: v for k, v in new_sc.items() if v > 0 and k <= new_total}
+            day_entry["total_play_count"] = sum(day_entry["subtitle_play_counts"].values())
         self._save_date_raw(raw)
 
     def _delete_date_entry(self, media_path: str) -> None:

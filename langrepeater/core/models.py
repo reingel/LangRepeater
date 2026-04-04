@@ -2,11 +2,19 @@ from dataclasses import dataclass, field
 
 
 @dataclass
+class WordTimestamp:
+    word: str
+    start: float  # seconds from start of media
+    end: float    # seconds from start of media
+
+
+@dataclass
 class Subtitle:
     index: int    # 1-based
     start: float  # seconds from start of media
     end: float    # seconds from start of media
     text: str
+    word_timestamps: list[WordTimestamp] = field(default_factory=list)
 
 
 @dataclass

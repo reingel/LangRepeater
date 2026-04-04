@@ -33,70 +33,23 @@ def download(url: str, output_dir: str) -> str:
 
 
 def transcribe(audio_path: str) -> str:
-    """Generate SRT from audio using openai-whisper, split by sentence.
+    """Generate word-level SRT from audio using stable-ts.
+
+    Uses: stable-ts input.mp3 -o input.srt --mel_first --regroup True
+    The resulting SRT uses <font color=...> tags to highlight each word
+    in sequence, which SRTParser converts into sentence-grouped Subtitles.
 
     Returns the path to the generated SRT file.
     """
-    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-    import whisper
-
-    prompt = 'Transcribe the audio into well-formed, complete sentences. Use proper punctuation and ensure each sentence is clearly separated and ends correctly.'
-
-    model = whisper.load_model("base")
-    result = model.transcribe(
-        audio_path,
-        initial_prompt=prompt,
-        temperature=0.0,
-        condition_on_previous_text=True,
-    )
-
-    # Group whisper segments into sentences by sentence-ending punctuation or max length.
-    MAX_WORDS = 30
-    sentences: list[tuple[float, float, str]] = []
-    buf_text = ""
-    buf_start: float | None = None
-    buf_end: float | None = None
-
-    def flush(start: float, end: float, text: str) -> None:
-        sentences.append((start, end, text))
-
-    def _is_japanese(s: str) -> bool:
-        return any(
-            "\u3040" <= c <= "\u309f"  # Hiragana
-            or "\u30a0" <= c <= "\u30ff"  # Katakana
-            or "\u4e00" <= c <= "\u9fff"  # Kanji
-            for c in s
-        )
-
-    for seg in result["segments"]:
-        raw = seg["text"]
-        text = raw.strip()
-        if not text:
-            continue
-        if _is_japanese(raw):
-            if text[-1] != "。":
-                text += "。"
-            text = text.replace(" ", "、")
-        if buf_start is None:
-            buf_start = seg["start"]
-        buf_end = seg["end"]
-        buf_text = (buf_text + text).strip() if buf_text else text
-        ends_sentence = text[-1] in ".!?。！？"
-        too_long = len(buf_text.split()) >= MAX_WORDS
-        if ends_sentence or too_long:
-            flush(buf_start, buf_end, buf_text)
-            buf_text = ""
-            buf_start = None
-            buf_end = None
-
-    if buf_text and buf_start is not None:
-        flush(buf_start, buf_end, buf_text)  # type: ignore[arg-type]
+    import subprocess
 
     srt_path = str(Path(audio_path).with_suffix(".srt"))
-    with open(srt_path, "w", encoding="utf-8") as f:
-        for i, (start, end, text) in enumerate(sentences, 1):
-            f.write(f"{i}\n{_to_srt_time(start)} --> {_to_srt_time(end)}\n{text}\n\n")
-
+    result = subprocess.run(
+        ["stable-ts", audio_path, "-o", srt_path, "--mel_first", "--regroup", "True"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"stable-ts failed: {result.stderr}")
     return srt_path
 
 
@@ -115,11 +68,3 @@ def extract_audio(mp4_path: str) -> str:
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg failed: {result.stderr}")
     return mp3_path
-
-
-def _to_srt_time(seconds: float) -> str:
-    h = int(seconds // 3600)
-    m = int((seconds % 3600) // 60)
-    s = int(seconds % 60)
-    ms = int((seconds % 1) * 1000)
-    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"

@@ -11,7 +11,7 @@ from .core.file_finder import FileFinder
 from .core.models import Session, Subtitle
 from .core.progress_store import ProgressStore
 from .core.stats_store import StatsStore
-from .core.srt_parser import SRTParser
+from .core.srt_parser import SRTParser, _words_yaml_path
 from .keyboard_handler import Action, read_action
 from .ui import RichUI
 
@@ -33,6 +33,7 @@ class AppController:
         self.srt_parser = SRTParser()
         self.player: AudioPlayer | None = None
         self.subtitles: list[Subtitle] = []
+        self.all_word_timestamps: list = []  # flat WordTimestamp list from YAML
         self.current_index: int = 0
         self.media_path: str = ""
         self.srt_path: str = ""
@@ -86,10 +87,10 @@ class AppController:
                     self.srt_path = session.srt_path
                 else:
                     srt_candidate = str(Path(session.media_path).with_suffix(".srt"))
-                    if Path(srt_candidate).exists():
+                    if Path(srt_candidate).exists() or _words_yaml_path(srt_candidate).exists():
                         self.srt_path = srt_candidate
                     else:
-                        self.ui.show_message("[dim]SRT file not found. Transcribing with Whisper...[/dim]")
+                        self.ui.show_message("[dim]SRT file not found. Transcribing with stable-ts...[/dim]")
                         from .core import url_loader
                         try:
                             self.srt_path = url_loader.transcribe(session.media_path)
@@ -180,10 +181,10 @@ class AppController:
 
         self.media_path = media_path
         srt_candidate = str(Path(media_path).with_suffix(".srt"))
-        if Path(srt_candidate).exists():
+        if Path(srt_candidate).exists() or _words_yaml_path(srt_candidate).exists():
             self.srt_path = srt_candidate
         else:
-            self.ui.show_message("[dim]No matching srt file found. Transcribing with Whisper...[/dim]")
+            self.ui.show_message("[dim]No matching srt file found. Transcribing with stable-ts...[/dim]")
             try:
                 self.srt_path = url_loader.transcribe(media_path)
             except Exception as e:
@@ -216,12 +217,12 @@ class AppController:
             return False
         self.media_path = media_files[idx]
 
-        # select srt file: use same-name srt if exists, else transcribe
+        # select srt file: use same-name srt (or words yaml) if exists, else transcribe
         srt_candidate = str(Path(self.media_path).with_suffix(".srt"))
-        if Path(srt_candidate).exists():
+        if Path(srt_candidate).exists() or _words_yaml_path(srt_candidate).exists():
             self.srt_path = srt_candidate
         else:
-            self.ui.show_message("[dim]No matching srt file found. Transcribing with Whisper...[/dim]")
+            self.ui.show_message("[dim]No matching srt file found. Transcribing with stable-ts...[/dim]")
             from .core import url_loader
             try:
                 self.srt_path = url_loader.transcribe(self.media_path)
@@ -236,6 +237,7 @@ class AppController:
 
     def _load_subtitles(self) -> None:
         self.subtitles = self.srt_parser.load(self.srt_path)
+        self.all_word_timestamps = self.srt_parser.load_words_yaml(self.srt_path)
 
     def _init_player(self) -> None:
         self.player = create_player(self.media_path)
@@ -510,7 +512,7 @@ class AppController:
         new_start = max(0.0, sub.start + delta)
         if new_start >= sub.end:
             return
-        sub.start = round(new_start, 1)
+        sub.start = round(new_start, 2)
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
         preview_end = min(sub.end, sub.start + 1.0)
@@ -523,7 +525,7 @@ class AppController:
         new_end = sub.end + delta
         if new_end <= sub.start:
             return
-        sub.end = round(new_end, 1)
+        sub.end = round(new_end, 2)
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
         preview_start = max(sub.start, sub.end - 1.0)
@@ -577,13 +579,7 @@ class AppController:
             return
         text_a = sub.text[:split_pos].rstrip()
         text_b = sub.text[split_pos:].lstrip()
-        words_a = len(text_a.split())
-        words_total = len(sub.text.split())
-        if words_total > 1:
-            ratio = words_a / words_total
-        else:
-            ratio = len(text_a) / len(sub.text) if sub.text else 0.5
-        split_time = round(sub.start + (sub.end - sub.start) * ratio, 3)
+        split_time = round(self._split_time_from_word_timestamps(sub, split_pos), 3)
         from .core.models import Subtitle
         sub_a = Subtitle(index=0, start=sub.start, end=split_time, text=text_a)
         sub_b = Subtitle(index=0, start=split_time, end=sub.end, text=text_b)
@@ -593,6 +589,58 @@ class AppController:
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
         self._play_current()
+
+    def _split_time_from_word_timestamps(self, sub: "Subtitle", split_pos: int) -> float:
+        """Find split time using flat word list from YAML.
+
+        1. Estimate sentence start position in flat list using subtitle index.
+        2. Use first 5 words of subtitle text to find exact sentence start.
+        3. Return midpoint of (last_before.end, first_after.start) + MARGIN.
+        Falls back to proportional estimate if word list is unavailable.
+        """
+        from .core.srt_parser import SRTParser
+        margin = SRTParser._MARGIN
+
+        all_wts = self.all_word_timestamps
+        text = sub.text
+        text_a = text[:split_pos].rstrip()
+        words_before = len(text_a.split())
+        sub_words = text.split()
+
+        def _proportional() -> float:
+            ratio = words_before / len(sub_words) if sub_words else 0.5
+            return sub.start + (sub.end - sub.start) * ratio
+
+        if not all_wts:
+            return _proportional()
+
+        # Step 1: narrow flat list to words within this subtitle's time window
+        tolerance = margin + 0.1
+        sub_wts = [wt for wt in all_wts
+                   if wt.start >= sub.start - tolerance and wt.end <= sub.end + tolerance]
+
+        if not sub_wts:
+            return _proportional()
+
+        # Step 2: find sentence start via 5-word window match
+        window = min(5, len(sub_words))
+        sentence_start = None
+        for i in range(len(sub_wts) - window + 1):
+            if all(sub_wts[i + j].word == sub_words[j] for j in range(window)):
+                sentence_start = i
+                break
+
+        if sentence_start is None:
+            return _proportional()
+
+        idx_before = sentence_start + words_before - 1
+        idx_after = sentence_start + words_before
+
+        if idx_before < len(sub_wts) and idx_after < len(sub_wts):
+            return (sub_wts[idx_before].end + sub_wts[idx_after].start) / 2 + margin
+        if idx_before < len(sub_wts):
+            return sub_wts[idx_before].end
+        return _proportional()
 
     def _handle_transcribe(self) -> None:
         if not self.subtitles:
