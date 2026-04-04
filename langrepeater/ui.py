@@ -381,11 +381,24 @@ class RichUI:
         Sequence alignment via DP so that omitted/inserted words don't cause
         all subsequent words to appear wrong.
         """
-        sys.stdout.write("\r\033[2K")
+        # Overwrite hint line above with color legend appended
+        _hint = "Transcribe [Tab: play | Opt+V: show/hide subtitle | ESC/Enter: return]"
+        _legend = (
+            "      \033[1;32m█\033[0m\033[2m correct  "
+            "\033[0m\033[1;33m█\033[0m\033[2m case/punct  "
+            "\033[0m\033[1;31m█\033[0m\033[2m wrong\033[0m"
+        )
+        sys.stdout.write(
+            "\r\033[2K"           # clear current (prompt) line
+            "\033[1A"             # move up to hint line
+            "\r\033[2K"           # clear hint line
+            f"\033[2m{_hint}\033[0m{_legend}\n"  # reprint hint + legend
+        )
         sys.stdout.flush()
 
         def _norm(w: str) -> str:
             return w.lower().strip(".,;:?!")
+
 
         answer_words = answer.split()
         input_words = user_input.split()
@@ -414,30 +427,35 @@ class RichUI:
                     )
 
         # Backtrace to get alignment
-        # Each element: (input_word_or_None, is_correct)
-        aligned: list[tuple[str, bool]] = []
+        # Each element: (display_word, style)
+        aligned: list[tuple[str, str]] = []
         i, j = n, m
         while i > 0 or j > 0:
             if i > 0 and j > 0 and _norm(answer_words[i - 1]) == _norm(input_words[j - 1]):
-                aligned.append((input_words[j - 1], True))
+                aw, uw = answer_words[i - 1], input_words[j - 1]
+                if aw == uw:
+                    style = "bold green"   # exact match
+                else:
+                    style = "bold yellow"  # correct word, wrong case/punctuation
+                aligned.append((uw, style))
                 i -= 1; j -= 1
             elif i > 0 and j > 0 and dp[i][j] == dp[i - 1][j - 1] + 1:
-                aligned.append((input_words[j - 1], False))  # substitution
+                aligned.append((input_words[j - 1], "bold red"))  # substitution
                 i -= 1; j -= 1
             elif i > 0 and dp[i][j] == dp[i - 1][j] + 1:
-                aligned.append(("_" * len(answer_words[i - 1]), False))  # omitted word
+                aligned.append(("_" * len(answer_words[i - 1]), "bold red"))  # omitted word
                 i -= 1
             else:
-                aligned.append((input_words[j - 1], False))  # extra input word
+                aligned.append((input_words[j - 1], "bold red"))  # extra input word
                 j -= 1
         aligned.reverse()
 
         line = Text("> ")
-        all_correct = all(ok for _, ok in aligned) and bool(aligned) and len(input_words) == n
-        for k, (word, ok) in enumerate(aligned):
+        all_correct = all(s == "bold green" for _, s in aligned) and bool(aligned) and len(input_words) == n
+        for k, (word, style) in enumerate(aligned):
             if k > 0:
                 line.append(" ")
-            line.append(word, style="bold green" if ok else "bold red")
+            line.append(word, style=style)
         if all_correct:
             line.append("  👍")
 
