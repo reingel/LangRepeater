@@ -261,13 +261,16 @@ class RichUI:
         import re
         text = subtitle.text
 
-        # Load split point rules from split_points.json
+        # Detect language and load matching rules from split_points.json
+        _is_ja = any('\u3000' <= c <= '\u9fff' or '\uf900' <= c <= '\ufaff' for c in text)
+        _lang = "ja" if _is_ja else "en"
         _json_path = Path(__file__).parent / "split_points.json"
         try:
             with open(_json_path, encoding="utf-8") as _f:
-                _rules = json.load(_f)
+                _all_rules = json.load(_f)
+            _rules = _all_rules.get(_lang, {})
         except Exception:
-            _rules = {"after": [], "before": []}
+            _rules = {}
         _after_chars = [c for c in _rules.get("after", []) if len(c) == 1]
         _before_words = _rules.get("before", [])
 

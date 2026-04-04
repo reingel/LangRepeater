@@ -24,7 +24,7 @@ def _words_yaml_path(srt_path: str) -> Path:
 
 
 class SRTParser:
-    _MARGIN = 0.2  # seconds of padding added to each sentence boundary
+    _MARGIN = 0.1  # seconds of padding added to each sentence boundary
 
     def save(self, path: str, subtitles: list[Subtitle]) -> None:
         srt_subtitles = [
