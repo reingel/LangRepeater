@@ -26,12 +26,19 @@ brew install yt-dlp
 pip install yt-dlp
 ```
 
-### stable-ts
+### whisper-cli
 
-Required for auto-generating word-level SRT subtitle files.
+Required for auto-generating subtitle files from audio.
+
+Install [whisper.cpp](https://github.com/ggerganov/whisper.cpp) and make `whisper-cli` available in your PATH.
+
+A model file is also required. Place it under `models/` in the project root:
 
 ```bash
-pip install stable-ts
+mkdir -p models
+# Download the small model (recommended)
+curl -L -o models/ggml-small.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
 ```
 
 ---
