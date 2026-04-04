@@ -739,7 +739,7 @@ class AppController:
             if not rlist:
                 continue
             ch = os.read(self._fd, 1)
-            if ch == b'\t':  # Tab → 다시 재생
+            if ch in (b'\t', b' '):  # Tab / Space → 다시 재생
                 self._refresh_display()
                 self._play_current()
                 self.ui.show_transcribe_prompt(buf, len(buf), init=True)
@@ -759,6 +759,11 @@ class AppController:
                         continue
                 self._refresh_display()
                 return
+            elif ch in (b'v', b'V'):  # V → 자막 보이기/감추기
+                self._subtitle_masked = not self._subtitle_masked
+                self._refresh_display()
+                self.ui.show_transcribe_prompt(buf, len(buf), init=True)
+                self.ui.show_transcribe_result(sub.text, user_input)
             else:
                 pass  # 다른 키 → 무시
 

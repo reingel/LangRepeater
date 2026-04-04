@@ -382,7 +382,7 @@ class RichUI:
         all subsequent words to appear wrong.
         """
         # Overwrite hint line above with color legend appended
-        _hint = "Transcribe [Tab: play | Opt+V: show/hide subtitle | ESC/Enter: return]"
+        _hint = "Transcribe [Tab/Space: play | V/Opt+V: show/hide subtitle | ESC/Enter: return]"
         _legend = (
             "      \033[1;32m█\033[0m\033[2m correct  "
             "\033[0m\033[1;33m█\033[0m\033[2m case/punct  "
