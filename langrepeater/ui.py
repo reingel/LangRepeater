@@ -369,25 +369,68 @@ class RichUI:
         sys.stdout.flush()
 
     def show_transcribe_result(self, answer: str, user_input: str) -> None:
-        """사용자 입력 줄을 그 자리에서 컬러로 업데이트: 틀린 단어는 적색."""
+        """사용자 입력 줄을 그 자리에서 컬러로 업데이트: 틀린 단어는 적색.
+
+        Sequence alignment via DP so that omitted/inserted words don't cause
+        all subsequent words to appear wrong.
+        """
         sys.stdout.write("\r\033[2K")
         sys.stdout.flush()
 
+        def _norm(w: str) -> str:
+            return w.lower().strip(".,;:?!")
+
         answer_words = answer.split()
         input_words = user_input.split()
-        max_len = max(len(answer_words), len(input_words))
+        n, m = len(answer_words), len(input_words)
+
+        # DP: edit distance keeping track of operations
+        # dp[i][j] = min cost to align answer[:i] with input[:j]
+        # cost: match=0, substitute=1, delete(skip answer word)=1, insert(extra input word)=1
+        INF = n + m + 1
+        dp = [[INF] * (m + 1) for _ in range(n + 1)]
+        dp[0][0] = 0
+        for i in range(1, n + 1):
+            dp[i][0] = i  # delete answer words
+        for j in range(1, m + 1):
+            dp[0][j] = j  # insert input words
+
+        for i in range(1, n + 1):
+            for j in range(1, m + 1):
+                if _norm(answer_words[i - 1]) == _norm(input_words[j - 1]):
+                    dp[i][j] = dp[i - 1][j - 1]          # match
+                else:
+                    dp[i][j] = min(
+                        dp[i - 1][j - 1] + 1,  # substitute
+                        dp[i - 1][j] + 1,       # delete (skip answer word)
+                        dp[i][j - 1] + 1,       # insert (extra input word)
+                    )
+
+        # Backtrace to get alignment
+        # Each element: (input_word_or_None, is_correct)
+        aligned: list[tuple[str, bool]] = []
+        i, j = n, m
+        while i > 0 or j > 0:
+            if i > 0 and j > 0 and _norm(answer_words[i - 1]) == _norm(input_words[j - 1]):
+                aligned.append((input_words[j - 1], True))
+                i -= 1; j -= 1
+            elif i > 0 and j > 0 and dp[i][j] == dp[i - 1][j - 1] + 1:
+                aligned.append((input_words[j - 1], False))  # substitution
+                i -= 1; j -= 1
+            elif i > 0 and dp[i][j] == dp[i - 1][j] + 1:
+                aligned.append(("_" * len(answer_words[i - 1]), False))  # omitted word
+                i -= 1
+            else:
+                aligned.append((input_words[j - 1], False))  # extra input word
+                j -= 1
+        aligned.reverse()
 
         line = Text("> ")
-        all_correct = True
-        for i in range(max_len):
-            a_word = answer_words[i] if i < len(answer_words) else ""
-            u_word = input_words[i] if i < len(input_words) else ""
-            match = a_word.lower().strip(".,;:?!") == u_word.lower().strip(".,;:?!")
-            if not match:
-                all_correct = False
-            if i > 0:
+        all_correct = all(ok for _, ok in aligned) and bool(aligned) and len(input_words) == n
+        for k, (word, ok) in enumerate(aligned):
+            if k > 0:
                 line.append(" ")
-            line.append(u_word if u_word else "___", style="bold green" if match else "bold red")
+            line.append(word, style="bold green" if ok else "bold red")
         if all_correct:
             line.append("  👍")
 
