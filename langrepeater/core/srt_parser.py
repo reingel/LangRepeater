@@ -13,14 +13,25 @@ def _strip_font_tags(text: str) -> str:
     return re.sub(r'<font[^>]*>(.*?)</font>', r'\1', text, flags=re.DOTALL).strip()
 
 
-def _extract_highlighted_word(text: str) -> str | None:
-    """Return the text inside the first <font color=...> tag, or None."""
-    m = re.search(r'<font[^>]*>(.*?)</font>', text, flags=re.DOTALL)
-    return m.group(1).strip() if m else None
+def _prefix_word_count(text: str) -> int:
+    """Return number of whitespace-delimited tokens before the first <font> tag.
+
+    Returns -1 if no font tag is found.
+    """
+    m = re.search(r'<font', text)
+    if not m:
+        return -1
+    prefix = text[:m.start()].strip()
+    return len(prefix.split()) if prefix else 0
 
 
 def _words_yaml_path(srt_path: str) -> Path:
     return Path(srt_path).with_name(Path(srt_path).stem + "-words.yaml")
+
+
+def _word_srt_path(srt_path: str) -> Path:
+    p = Path(srt_path)
+    return p.with_name(p.stem + "-word" + p.suffix)
 
 
 class SRTParser:
@@ -55,10 +66,11 @@ class SRTParser:
         raw_subs = list(srt.parse(content))
 
         if self._is_word_level(raw_subs):
+            Path(path).rename(_word_srt_path(path))
             all_wts = self._collect_words(raw_subs)
             self.save_words_yaml(path, all_wts)
             subtitles = self.subtitles_from_words(all_wts)
-            self.save(path, subtitles)  # overwrite with sentence-level SRT
+            self.save(path, subtitles)
             return subtitles
 
         # Normal sentence-level SRT
@@ -97,11 +109,13 @@ class SRTParser:
 
         all_wts: list[WordTimestamp] = []
         for group in word_groups:
+            base_text = _strip_font_tags(group[0].content)
+            sentence_words = base_text.split()
             for entry in group:
-                highlighted = _extract_highlighted_word(entry.content)
-                if highlighted:
+                idx = _prefix_word_count(entry.content)
+                if 0 <= idx < len(sentence_words):
                     all_wts.append(WordTimestamp(
-                        word=highlighted,
+                        word=sentence_words[idx],
                         start=entry.start.total_seconds(),
                         end=entry.end.total_seconds(),
                     ))
