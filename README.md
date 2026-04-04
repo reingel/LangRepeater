@@ -10,7 +10,7 @@ The following external tools must be installed before using LangRepeater:
 
 ### ffmpeg
 
-Required by Whisper to process audio files.
+Required for extracting audio from MP4 files.
 
 ```bash
 brew install ffmpeg
@@ -26,12 +26,12 @@ brew install yt-dlp
 pip install yt-dlp
 ```
 
-### Whisper
+### stable-ts
 
-Required for auto-generating SRT subtitle files.
+Required for auto-generating word-level SRT subtitle files.
 
 ```bash
-pip install openai-whisper
+pip install stable-ts
 ```
 
 ---
