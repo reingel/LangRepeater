@@ -1,0 +1,28 @@
+{
+  "after": [
+    ".",
+    ",",
+    ";",
+    ":",
+    "。",
+    "！",
+    "？",
+    "、"
+  ],
+  "before": [
+    "and",
+    "or",
+    "but",
+    "when",
+    "what",
+    "where",
+    "which",
+    "that",
+    "because",
+    "due to",
+    "however",
+    "until",
+    "if",
+    "so"
+  ]
+}

@@ -31,7 +31,7 @@ class RichUI:
         "Audio segment repeater for language learning"
     )
 
-    _VISIBLE_PUNCT = frozenset(".,;:?!-")
+    _VISIBLE_PUNCT = frozenset(".,;:?!-'")
 
     def clear(self) -> None:
         console.clear()
@@ -256,32 +256,39 @@ class RichUI:
 
     def ask_split_point(self, subtitle, fd: int) -> int | None:
         """Show split point candidates. Returns char position or None to cancel."""
+        import json
         import os
         import re
         text = subtitle.text
+
+        # Load split point rules from split_points.json
+        _json_path = Path(__file__).parent / "split_points.json"
+        try:
+            with open(_json_path, encoding="utf-8") as _f:
+                _rules = json.load(_f)
+        except Exception:
+            _rules = {"after": [], "before": []}
+        _after_chars = [c for c in _rules.get("after", []) if len(c) == 1]
+        _before_words = _rules.get("before", [])
+
         # Find candidate split positions
         positions: list[int] = []
-        # English: after . , ; :
-        for punct_pattern in (r'\.\s*', r',\s*', r';\s*', r':\s*'):
-            for m in re.finditer(punct_pattern, text):
+
+        # after: split after each listed character (followed by optional whitespace)
+        for ch in _after_chars:
+            pattern = re.escape(ch) + r'\s*'
+            for m in re.finditer(pattern, text):
                 pos = m.end()
                 if 0 < pos < len(text) and pos not in positions:
                     positions.append(pos)
-        # English: before and/or
-        for m in re.finditer(r'\b(and|or|but)\b', text, re.IGNORECASE):
-            pos = m.start()
-            if 0 < pos < len(text) and pos not in positions:
-                positions.append(pos)
-        # English: before clause words
-        for m in re.finditer(r'\b(when|what|where|which|that|because|due to|however|until|if|so)\b', text, re.IGNORECASE):
-            pos = m.start()
-            if 0 < pos < len(text) and pos not in positions:
-                positions.append(pos)
-        # Japanese: after 。！？、
-        for m in re.finditer(r'[。！？、]\s*', text):
-            pos = m.end()
-            if 0 < pos < len(text) and pos not in positions:
-                positions.append(pos)
+
+        # before: split before each listed word/phrase
+        for phrase in _before_words:
+            pattern = r'\b' + re.escape(phrase) + r'\b'
+            for m in re.finditer(pattern, text, re.IGNORECASE):
+                pos = m.start()
+                if 0 < pos < len(text) and pos not in positions:
+                    positions.append(pos)
         positions = sorted(set(positions))
         if not positions:
             console.print("[yellow]No split points found.[/yellow]")
