@@ -8,6 +8,16 @@ import yaml
 
 from .models import Subtitle, WordTimestamp
 
+_CAPITAL_LETTERS_PATH = Path(__file__).parent.parent / "capital_letters.json"
+
+def _load_capital_letters() -> set[str]:
+    if _CAPITAL_LETTERS_PATH.exists():
+        with open(_CAPITAL_LETTERS_PATH, encoding="utf-8") as f:
+            return set(json.load(f))
+    return {"I"}
+
+_CAPITAL_LETTERS: set[str] = _load_capital_letters()
+
 
 def _strip_font_tags(text: str) -> str:
     """Remove <font ...>...</font> tags, keeping inner text."""
@@ -41,7 +51,7 @@ def _word_srt_path(srt_path: str) -> Path:
 
 
 class SRTParser:
-    _MARGIN = -0.3  # seconds of padding added to each sentence boundary
+    _MARGIN = 0.0  # seconds of padding added to each sentence boundary
 
     def save(self, path: str, subtitles: list[Subtitle]) -> None:
         srt_subtitles = [
@@ -214,9 +224,15 @@ class SRTParser:
         result: list[WordTimestamp] = []
         for seg in data.get("transcription", []):
             text = seg.get("text", "")
-            stripped = text.strip().strip('"')
+            text_stripped = text.strip()
+            had_leading_quote = text_stripped.startswith('"')
+            stripped = text_stripped.strip('"')
             if not stripped or stripped.startswith("["):
                 continue
+            if had_leading_quote and stripped and stripped[0].isupper():
+                first_word = re.split(r"[\s']", stripped)[0]
+                if first_word not in _CAPITAL_LETTERS:
+                    stripped = stripped[0].lower() + stripped[1:]
             offsets = seg.get("offsets", {})
             start = offsets.get("from", 0) / 1000.0
             end = offsets.get("to", 0) / 1000.0
