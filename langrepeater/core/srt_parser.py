@@ -9,6 +9,8 @@ import yaml
 from .models import Subtitle, WordTimestamp
 
 _CAPITAL_LETTERS_PATH = Path(__file__).parent.parent / "capital_letters.json"
+_ABBREVIATIONS_PATH = Path(__file__).parent.parent / "abbreviations.json"
+
 
 def _load_capital_letters() -> set[str]:
     if _CAPITAL_LETTERS_PATH.exists():
@@ -16,7 +18,16 @@ def _load_capital_letters() -> set[str]:
             return set(json.load(f))
     return {"I"}
 
+
+def _load_abbreviations() -> set[str]:
+    if _ABBREVIATIONS_PATH.exists():
+        with open(_ABBREVIATIONS_PATH, encoding="utf-8") as f:
+            return set(json.load(f))
+    return set()
+
+
 _CAPITAL_LETTERS: set[str] = _load_capital_letters()
+_ABBREVIATIONS: set[str] = _load_abbreviations()
 
 
 def _strip_font_tags(text: str) -> str:
@@ -157,7 +168,7 @@ class SRTParser:
         current: list[WordTimestamp] = []
         for wt in all_wts:
             current.append(wt)
-            if re.search(r'[.?!]\s*$', wt.word):
+            if re.search(r'[.?!]\s*$', wt.word) and wt.word.strip() not in _ABBREVIATIONS:
                 sentences.append(current)
                 current = []
         if current:
