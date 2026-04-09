@@ -22,6 +22,12 @@ class RichUI:
         "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s  |  .: end +0.1s[/dim]\n"
         "[dim]P: segment stats       |  0: date stats[/dim]"
     )
+    _HELP_TEXT_R = (
+        "[dim]Space: play/pause      |  A/←/↑: prev         |  D/→/↓: next   |  [: prev 3  |  ]: next 3[/dim]\n"
+        "[dim]V: show/hide subtitle  |  S: replay           |  T: transcribe |  Q: quit    |  ESC: home[/dim]\n"
+        "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s  |  .: end +0.1s[/dim]\n"
+        "[dim]P: segment stats       |  0: date stats       |  R: resample[/dim]"
+    )
     _HELP_TEXT_STATS = (
         "[dim][: prev page  |  ]: next page  |  any key: back[/dim]"
     )
@@ -45,19 +51,30 @@ class RichUI:
         """Study screen header: program name + description + mode + key bindings."""
         if mode == "L":
             mode_line = (
-                "[bold white]1: Listening mode[/bold white]  |  "
-                "[dim]2: Listen & Repeat mode[/dim]"
+                "[bold yellow]1: Listening mode[/bold yellow]  |  "
+                "[dim]2: Listen & Repeat mode[/dim]  |  "
+                "[dim]3: Review mode[/dim]"
             )
             help_text = self._HELP_TEXT_L
+        elif mode == "R":
+            mode_line = (
+                "[dim]1: Listening mode[/dim]  |  "
+                "[dim]2: Listen & Repeat mode[/dim]  |  "
+                "[bold green]3: Review mode[/bold green]"
+            )
+            help_text = self._HELP_TEXT_R
         else:
             mode_line = (
                 "[dim]1: Listening mode[/dim]  |  "
-                "[bold white]2: Listen & Repeat mode[/bold white]"
+                "[bold white]2: Listen & Repeat mode[/bold white]  |  "
+                "[dim]3: Review mode[/dim]"
             )
             help_text = self._HELP_TEXT_LR
+        border_style = "yellow" if mode == "L" else "green" if mode == "R" else ""
         console.print(Panel(
             self._HEADER_TEXT + "\n\n" + mode_line + "\n\n" + help_text,
             expand=False,
+            border_style=border_style,
         ))
 
     def show_file_list(self, files: list[str], prompt: str) -> int | None:
@@ -87,7 +104,7 @@ class RichUI:
             return text
         return words[0] + " " + " ".join(RichUI._mask_word(w) for w in words[1:-1]) + " " + words[-1]
 
-    def show_subtitles(self, subtitles: list[Subtitle], current_index: int, masked: bool = True) -> None:
+    def show_subtitles(self, subtitles: list[Subtitle], current_index: int, masked: bool = True, review_total: int | None = None) -> None:
         n = len(subtitles)
         # determine which 3 to display
         if n == 0:
@@ -106,11 +123,17 @@ class RichUI:
 
         # show progress info
         total_num_blocks = 51
-        progress_pct = (current_index + 1) / n * 100
+        if review_total is not None:
+            display_current = current_index + 1
+            display_total = review_total
+        else:
+            display_current = current_index + 1
+            display_total = n
+        progress_pct = display_current / display_total * 100
         filled = round(progress_pct / 100 * total_num_blocks)
         bar = "█" * filled + "░" * (total_num_blocks - filled)
         console.print(
-            f"\n [dim]Progress: {current_index + 1}/{n} ({progress_pct:.1f}%)  {bar}[/dim]"
+            f"\n [dim]Progress: {display_current}/{display_total} ({progress_pct:.1f}%)  {bar}[/dim]"
         )
 
         console.print()
