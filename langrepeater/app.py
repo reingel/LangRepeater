@@ -472,11 +472,34 @@ class AppController:
                 self.media_path, self.current_index, len(self.subtitles)
             )
 
+    _SENTENCE_END_PUNCT = frozenset('.!?。！？')
+
+    def _expand_to_siblings(self, idx: int) -> list[int]:
+        """분리된 문장 감지: 구두점/대소문자 기반으로 앞뒤 문장 포함.
+
+        - 문장이 .!?로 끝나지 않으면 → 바로 뒤 문장 추가
+        - 문장이 대문자로 시작하지 않으면 → 바로 앞 문장 추가
+        """
+        n = len(self.subtitles)
+        group = [idx]
+        text = self.subtitles[idx].text.strip()
+        if text and text[-1] not in self._SENTENCE_END_PUNCT:
+            if idx + 1 < n:
+                group.append(idx + 1)
+        if text and not text[0].isupper():
+            if idx - 1 >= 0:
+                group.insert(0, idx - 1)
+        return group
+
     def _sample_review_list(self) -> list[int] | None:
-        """학습통계 기반 확률분포로 10개 문장 샘플링. 학습 문장 10개 미만이면 None 반환."""
+        """학습통계 기반 확률분포로 총 문장 수가 10이 되도록 그룹 단위 샘플링.
+
+        분리된 문장은 구두점/대소문자 휴리스틱으로 감지하여 같은 그룹으로 묶인다.
+        그룹을 가중치 비복원 추출로 하나씩 선택하고, 누적 문장 수가 10 이상이면 종료.
+        반환값은 0-based 인덱스 flat 리스트 (그룹 내 순서 유지).
+        """
         import random
         stats = self.stats_store.load(self.media_path)
-        # 1-based subtitle index → 0-based list index, 재생 횟수 > 0 인 것만
         valid: dict[int, int] = {}
         for idx_1based, count in stats.subtitle_play_counts.items():
             idx_0based = int(idx_1based) - 1
@@ -484,11 +507,47 @@ class AppController:
                 valid[idx_0based] = count
         if len(valid) < 10:
             return None
-        indices = list(valid.keys())
-        weights = [valid[i] for i in indices]
-        total = sum(weights)
-        probs = [w / total for w in weights]
-        return random.choices(indices, weights=probs, k=10)
+
+        # 중복 없는 그룹 풀 구성 (대표값 = min index 기준 dedup)
+        seen_reps: set[int] = set()
+        pool: list[list[int]] = []   # 각 원소는 0-based 인덱스 그룹
+        pool_weights: list[float] = []
+        for idx in sorted(valid.keys()):
+            group = self._expand_to_siblings(idx)
+            rep = min(group)
+            if rep in seen_reps:
+                continue
+            seen_reps.add(rep)
+            weight = float(sum(valid.get(i, 0) for i in group))
+            if weight > 0:
+                pool.append(group)
+                pool_weights.append(weight)
+
+        if len(pool) < 10:
+            return None
+
+        # 비복원 가중치 추출: 총 문장 수가 10 이상이 될 때까지
+        remaining = list(range(len(pool)))
+        weights = list(pool_weights)
+        result: list[int] = []
+        sentence_count = 0
+
+        while sentence_count < 10 and remaining:
+            total_w = sum(weights[i] for i in remaining)
+            r = random.uniform(0, total_w)
+            cumsum = 0.0
+            chosen_pos = len(remaining) - 1
+            for pos, i in enumerate(remaining):
+                cumsum += weights[i]
+                if r <= cumsum:
+                    chosen_pos = pos
+                    break
+            chosen_i = remaining.pop(chosen_pos)
+            group = pool[chosen_i]
+            result.extend(group)
+            sentence_count += len(group)
+
+        return result
 
     def _handle_review(self) -> None:
         """R 키: 10개 문장 샘플링 (또는 재샘플링)."""
