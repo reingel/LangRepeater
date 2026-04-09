@@ -54,8 +54,11 @@ class AppController:
         self._paused_at: float = 0.0
         self._paused_progress: float = 0.0
         self._was_playing: bool = False
-        self._mode: str = "LR"  # "L" = Listening mode, "LR" = Listen & Repeat mode
+        self._mode: str = "LR"  # "L" = Listening mode, "LR" = Listen & Repeat mode, "R" = Review mode
         self._lr_mode_index: int = 0  # LR모드 복귀 시 돌아갈 자막 인덱스
+        self._review_list: list[int] = []  # R모드: 샘플링된 자막 0-based 인덱스 목록
+        self._review_index: int = 0  # R모드: review_list 내 현재 위치 (0-9)
+        self._review_lr_return_index: int = 0  # R모드 → LR모드 복귀 시 돌아갈 인덱스
 
     def run(self) -> None:
         while True:
@@ -313,6 +316,8 @@ class AppController:
                     running = False
                 elif action == Action.MODE_LISTENING:
                     if self._mode != "L":
+                        if self._mode == "R":
+                            self.current_index = self._review_lr_return_index
                         self._lr_mode_index = self.current_index
                         self._mode = "L"
                         if self.player:
@@ -332,7 +337,32 @@ class AppController:
                         self._play_duration = 0.0
                         if prev_mode == "L":
                             self.current_index = self._lr_mode_index
+                        elif prev_mode == "R":
+                            self.current_index = self._review_lr_return_index
                         self._refresh_display()
+                elif action == Action.MODE_REVIEW:
+                    if self._mode != "R":
+                        self._review_lr_return_index = self.current_index
+                        if self.player:
+                            self.player.stop()
+                        self._paused = False
+                        self._was_playing = False
+                        self._play_duration = 0.0
+                        self._mode = "R"
+                        # 이전 샘플링 상태가 있으면 복원
+                        if self._review_list:
+                            self.current_index = self._review_list[self._review_index]
+                        self._refresh_display()
+                elif action == Action.REVIEW:
+                    self._handle_review()
+                elif self._mode == "R" and action == Action.NEXT:
+                    self._handle_review_next()
+                elif self._mode == "R" and action == Action.PREV:
+                    self._handle_review_prev()
+                elif self._mode == "R" and action == Action.STATS_NEXT:
+                    self._handle_review_page(1)
+                elif self._mode == "R" and action == Action.STATS_PREV:
+                    self._handle_review_page(-1)
                 elif action == Action.PLAY:
                     self._handle_play()
                 elif action == Action.NEXT:
@@ -350,6 +380,14 @@ class AppController:
                     self._handle_goto()
                 elif self._mode == "L":
                     pass  # L모드에서는 위 키 외 다른 키 무시
+                elif action == Action.GOTO and self._mode != "R":
+                    self._handle_goto()
+                elif action == Action.MERGE:
+                    if self._mode != "R":
+                        self._handle_merge()
+                elif action == Action.SPLIT:
+                    if self._mode != "R":
+                        self._handle_split()
                 elif action == Action.TRANSCRIBE:
                     self._handle_transcribe()
                 elif action == Action.RESTART:
@@ -362,12 +400,6 @@ class AppController:
                     self._handle_shift_end(-0.1)
                 elif action == Action.SHIFT_END_LATER:
                     self._handle_shift_end(0.1)
-                elif action == Action.MERGE:
-                    self._handle_merge()
-                elif action == Action.SPLIT:
-                    self._handle_split()
-                elif action == Action.GOTO:
-                    self._handle_goto()
                 elif action == Action.PRINT_STATS:
                     self._handle_print_stats()
                     self._showing_stats = True
@@ -439,6 +471,69 @@ class AppController:
             self.stats_store.update_progress(
                 self.media_path, self.current_index, len(self.subtitles)
             )
+
+    def _sample_review_list(self) -> list[int] | None:
+        """학습통계 기반 확률분포로 10개 문장 샘플링. 학습 문장 10개 미만이면 None 반환."""
+        import random
+        stats = self.stats_store.load(self.media_path)
+        # 1-based subtitle index → 0-based list index, 재생 횟수 > 0 인 것만
+        valid: dict[int, int] = {}
+        for idx_1based, count in stats.subtitle_play_counts.items():
+            idx_0based = int(idx_1based) - 1
+            if count > 0 and 0 <= idx_0based < len(self.subtitles):
+                valid[idx_0based] = count
+        if len(valid) < 10:
+            return None
+        indices = list(valid.keys())
+        weights = [valid[i] for i in indices]
+        total = sum(weights)
+        probs = [w / total for w in weights]
+        return random.choices(indices, weights=probs, k=10)
+
+    def _handle_review(self) -> None:
+        """R 키: 10개 문장 샘플링 (또는 재샘플링)."""
+        if not self.subtitles:
+            return
+        sampled = self._sample_review_list()
+        if sampled is None:
+            self._refresh_display()
+            self.ui.show_message("[yellow]Need at least 10 studied segments to start review.[/yellow]")
+            return
+        self._review_list = sampled
+        self._review_index = 0
+        self.current_index = self._review_list[0]
+        self._refresh_display()
+        self._play_current()
+
+    def _handle_review_next(self) -> None:
+        if not self._review_list:
+            self._handle_next()
+            return
+        if self._review_index < len(self._review_list) - 1:
+            self._review_index += 1
+            self.current_index = self._review_list[self._review_index]
+        self._refresh_display()
+        self._play_current()
+
+    def _handle_review_prev(self) -> None:
+        if not self._review_list:
+            self._handle_prev()
+            return
+        if self._review_index > 0:
+            self._review_index -= 1
+            self.current_index = self._review_list[self._review_index]
+        self._refresh_display()
+        self._play_current()
+
+    def _handle_review_page(self, direction: int) -> None:
+        if not self._review_list:
+            self._handle_l_page(direction)
+            return
+        new_idx = max(0, min(len(self._review_list) - 1, self._review_index + direction * 3))
+        self._review_index = new_idx
+        self.current_index = self._review_list[self._review_index]
+        self._refresh_display()
+        self._play_current()
 
     def _handle_home(self) -> None:
         if self.player:
@@ -733,7 +828,25 @@ class AppController:
             return
         self.ui.show_transcribe_result(sub.text, user_input)
 
-        # 결과 표시 후 Tab(재생), Opt+V(자막 토글) 처리 루프
+        # 결과 표시 후 Tab(재생), Opt+V(자막 토글), 이동 처리 루프
+        def _nav_prev():
+            if self._mode == "R":
+                self._handle_review_prev()
+            else:
+                self._handle_prev()
+
+        def _nav_next():
+            if self._mode == "R":
+                self._handle_review_next()
+            else:
+                self._handle_next()
+
+        def _nav_page(direction: int):
+            if self._mode == "R":
+                self._handle_review_page(direction)
+            else:
+                self._handle_l_page(direction)
+
         while True:
             rlist, _, _ = select.select([self._fd], [], [], 0.1)
             if not rlist:
@@ -744,28 +857,57 @@ class AppController:
                 self._play_current()
                 self.ui.show_transcribe_prompt(buf, len(buf), init=True)
                 self.ui.show_transcribe_result(sub.text, user_input)
-            elif ch in (b'\r', b'\n', b'\x1b'):  # Enter / ESC → 종료
-                if ch == b'\x1b':
-                    rlist2, _, _ = select.select([self._fd], [], [], 0.05)
-                    if rlist2:
-                        ch2 = os.read(self._fd, 1)
-                        if ch2 == b'v':  # Opt+V → 자막 보이기/감추기
-                            self._subtitle_masked = not self._subtitle_masked
-                            self._refresh_display()
-                            self.ui.show_transcribe_prompt(buf, len(buf), init=True)
-                            self.ui.show_transcribe_result(sub.text, user_input)
-                            continue
-                        # 다른 Opt+key → 무시
-                        continue
+            elif ch in (b'\r', b'\n'):  # Enter → 종료
                 self._refresh_display()
+                return
+            elif ch == b'\x1b':  # ESC 또는 escape sequence
+                rlist2, _, _ = select.select([self._fd], [], [], 0.05)
+                if not rlist2:
+                    # 단독 ESC → 종료
+                    self._refresh_display()
+                    return
+                ch2 = os.read(self._fd, 1)
+                if ch2 == b'[':  # CSI sequence (화살표 키 등)
+                    rlist3, _, _ = select.select([self._fd], [], [], 0.05)
+                    if rlist3:
+                        ch3 = os.read(self._fd, 1)
+                        if ch3 in (b'A', b'D'):  # ↑/← → 이전
+                            self._refresh_display()
+                            _nav_prev()
+                            return
+                        if ch3 in (b'B', b'C'):  # ↓/→ → 다음
+                            self._refresh_display()
+                            _nav_next()
+                            return
+                    # 기타 CSI → 무시
+                elif ch2 == b'v':  # Opt+V → 자막 보이기/감추기
+                    self._subtitle_masked = not self._subtitle_masked
+                    self._refresh_display()
+                    self.ui.show_transcribe_prompt(buf, len(buf), init=True)
+                    self.ui.show_transcribe_result(sub.text, user_input)
+                # 그 외 escape sequence → 무시
+            elif ch in (b'a', b'A'):  # A → 이전
+                self._refresh_display()
+                _nav_prev()
+                return
+            elif ch in (b'd', b'D'):  # D → 다음
+                self._refresh_display()
+                _nav_next()
+                return
+            elif ch == b'[':  # [ → 이전 3
+                self._refresh_display()
+                _nav_page(-1)
+                return
+            elif ch == b']':  # ] → 다음 3
+                self._refresh_display()
+                _nav_page(1)
                 return
             elif ch in (b'v', b'V'):  # V → 자막 보이기/감추기
                 self._subtitle_masked = not self._subtitle_masked
                 self._refresh_display()
                 self.ui.show_transcribe_prompt(buf, len(buf), init=True)
                 self.ui.show_transcribe_result(sub.text, user_input)
-            else:
-                pass  # 다른 키 → 무시
+            # 그 외 키 → 무시
 
     def _reindex_subtitles(self) -> None:
         for i, sub in enumerate(self.subtitles):
@@ -853,7 +995,11 @@ class AppController:
     def _refresh_display(self) -> None:
         self.ui.clear()
         self.ui.show_study_header(self._mode)
-        self.ui.show_subtitles(self.subtitles, self.current_index, masked=self._subtitle_masked)
+        if self._mode == "R" and self._review_list:
+            review_subs = [self.subtitles[i] for i in self._review_list]
+            self.ui.show_subtitles(review_subs, self._review_index, masked=self._subtitle_masked, review_total=len(self._review_list))
+        else:
+            self.ui.show_subtitles(self.subtitles, self.current_index, masked=self._subtitle_masked)
         if self.player and self.player.is_playing() and self._play_duration > 0:
             elapsed = time.monotonic() - self._play_start_time
             progress = min(1.0, elapsed / self._play_duration)
