@@ -86,11 +86,11 @@ LangRepeater
 
 ## Modes
 
-### Review mode (default, key: `1`)
+### Review mode (key: `1`)
 
 Samples ~10 previously studied segments weighted by play count and lets you review them in Listen & Repeat style. Press `R` to resample. Progress shows `xx/10`. Play counts are recorded.
 
-### Listen & Repeat mode (key: `2`)
+### Listen & Repeat mode (default, key: `2`)
 
 Plays each segment one at a time. Use `Space` to play/pause, `S` to replay from the start, and `D`/`A` to navigate. Subtitles are shown with middle words masked; press `V` to reveal. Press `T` to enter transcribe mode. Play counts are recorded.
 
