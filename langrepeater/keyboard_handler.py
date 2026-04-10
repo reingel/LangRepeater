@@ -27,6 +27,7 @@ class Action(Enum):
     GOTO = auto()
     MODE_REVIEW = auto()
     REVIEW = auto()
+    BACK = auto()
 
 
 _CHAR_MAP: dict[str, Action] = {
@@ -46,9 +47,9 @@ _CHAR_MAP: dict[str, Action] = {
     "0": Action.PRINT_DATE_STATS,
     "]": Action.STATS_NEXT,
     "[": Action.STATS_PREV,
-    "1": Action.MODE_LISTENING,
+    "1": Action.MODE_REVIEW,
     "2": Action.MODE_LISTEN_REPEAT,
-    "3": Action.MODE_REVIEW,
+    "3": Action.MODE_LISTENING,
     "t": Action.TRANSCRIBE,
     "g": Action.GOTO,
     "r": Action.REVIEW,
@@ -84,6 +85,9 @@ def read_action(fd: int, timeout: float = 0.1) -> Action | None:
                     if ch3 == b"D":
                         return Action.PREV   # left arrow
         return Action.HOME  # bare ESC
+
+    if ch in (b"\x7f", b"\x08"):  # Backspace / Delete
+        return Action.BACK
 
     char = ch.decode("utf-8", errors="ignore").lower()
     return _CHAR_MAP.get(char)

@@ -59,6 +59,8 @@ class AppController:
         self._review_list: list[int] = []  # R모드: 샘플링된 자막 0-based 인덱스 목록
         self._review_index: int = 0  # R모드: review_list 내 현재 위치 (0-9)
         self._review_lr_return_index: int = 0  # R모드 → LR모드 복귀 시 돌아갈 인덱스
+        self._back_index: int = -1  # BACK 키 복귀용 이전 자막 인덱스 (-1 = 없음)
+        self._back_review_index: int = 0  # R모드 BACK 키 복귀용 이전 review_index
 
     def run(self) -> None:
         while True:
@@ -353,6 +355,8 @@ class AppController:
                         if self._review_list:
                             self.current_index = self._review_list[self._review_index]
                         self._refresh_display()
+                elif action == Action.BACK:
+                    self._handle_back()
                 elif action == Action.REVIEW:
                     self._handle_review()
                 elif self._mode == "R" and action == Action.NEXT:
@@ -444,6 +448,7 @@ class AppController:
         self._play_current()
 
     def _handle_next(self) -> None:
+        self._save_back()
         if self.current_index < len(self.subtitles) - 1:
             self.current_index += 1
         self._refresh_display()
@@ -453,6 +458,7 @@ class AppController:
             self._play_current()
 
     def _handle_prev(self) -> None:
+        self._save_back()
         if self.current_index > 0:
             self.current_index -= 1
         self._refresh_display()
@@ -568,6 +574,7 @@ class AppController:
         if not self._review_list:
             self._handle_next()
             return
+        self._save_back()
         if self._review_index < len(self._review_list) - 1:
             self._review_index += 1
             self.current_index = self._review_list[self._review_index]
@@ -578,6 +585,7 @@ class AppController:
         if not self._review_list:
             self._handle_prev()
             return
+        self._save_back()
         if self._review_index > 0:
             self._review_index -= 1
             self.current_index = self._review_list[self._review_index]
@@ -589,10 +597,27 @@ class AppController:
             self._handle_l_page(direction)
             return
         new_idx = max(0, min(len(self._review_list) - 1, self._review_index + direction * 3))
-        self._review_index = new_idx
-        self.current_index = self._review_list[self._review_index]
+        if new_idx != self._review_index:
+            self._save_back()
+            self._review_index = new_idx
+            self.current_index = self._review_list[self._review_index]
         self._refresh_display()
         self._play_current()
+
+    def _save_back(self) -> None:
+        self._back_index = self.current_index
+        self._back_review_index = self._review_index
+
+    def _handle_back(self) -> None:
+        if self._back_index < 0:
+            return
+        self.current_index, self._back_index = self._back_index, self.current_index
+        self._review_index, self._back_review_index = self._back_review_index, self._review_index
+        self._refresh_display()
+        if self._mode == "L":
+            self._start_l_mode_playback()
+        else:
+            self._play_current()
 
     def _handle_home(self) -> None:
         if self.player:
@@ -611,6 +636,7 @@ class AppController:
             return
         new_index = max(0, min(len(self.subtitles) - 1, self.current_index + direction * 3))
         if new_index != self.current_index:
+            self._save_back()
             self.current_index = new_index
             self._refresh_display()
             if self._mode == "L":
@@ -715,6 +741,7 @@ class AppController:
         if raw is None:
             self._refresh_display()
             return
+        self._save_back()
         self.current_index = raw - 1
         self._refresh_display()
         if self._mode == "L":
