@@ -60,7 +60,7 @@ class RichUI:
         "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s  |  .: end +0.1s     [/dim]\n"
         "[dim]P: segment stats       |  0: date stats       |  B: bookmark   |                   [/dim]"
     )
-    _HELP_TEXT_STATS = "[dim][ ]: prev/next page  |  any key: back[/dim]"
+    _HELP_TEXT_STATS = "[dim]↑/↓: move  |  Enter: go  |  [ ]: prev/next page  |  any key: back[/dim]"
 
     # ── 메뉴 힌트 ─────────────────────────────────────────────────────────────
     _HINT_MENU     = "[dim]↑/↓: move  |  Enter: select  |  ESC: back[/dim]"
@@ -68,7 +68,7 @@ class RichUI:
     _HINT_BOOKMARK = "[dim]↑/↓: move  |  Enter: go  |  [ ]: prev/next page  |  any key: back[/dim]"
 
     # ── 통계 화면 컬럼 헤더 ───────────────────────────────────────────────────
-    _STATS_SEG_HEADER  = "[bold white]     # repeats  sentence[/bold white]"
+    _STATS_SEG_HEADER  = "[bold white]     #     repeats  sentence[/bold white]"
     _STATS_DATE_HEADER = "[bold white]               segments  repeats   net play time[/bold white]"
 
     # ── 받아쓰기 힌트 / 범례 ──────────────────────────────────────────────────
@@ -633,6 +633,8 @@ class RichUI:
         page: int,
         progress_pct: float = 0.0,
         current_sub_index: int = -1,
+        bookmarks: set[int] | None = None,
+        cursor: int = -1,
     ) -> None:
         page_size = 10
         total = len(ranked)
@@ -641,10 +643,22 @@ class RichUI:
         entries = ranked[start:end]
         console.print(f"\n[bold cyan]── Learning Statistics ──[/bold cyan]  [dim]Progress: {progress_pct:.1f}%[/dim]\n")
         console.print(self._STATS_SEG_HEADER)
-        for idx, count in entries:
+        for i, (idx, count) in enumerate(entries):
+            abs_pos = start + i
             text = sub_map[idx].text if idx in sub_map else f"(subtitle {idx})"
-            marker = "[yellow]▶[/yellow]" if idx == current_sub_index else " "
-            console.print(f"{marker} [white dim]{idx:>4}[/white dim]  [bold cyan]{count:>4}x[/bold cyan]   [bold white]{text}[/bold white]")
+            bm = "  [yellow]*[/yellow]  " if (bookmarks and idx in bookmarks) else "     "
+            play = "  [bold yellow]▶[/bold yellow]  " if idx == current_sub_index else "     "
+            if abs_pos == cursor:
+                console.print(
+                    "[bold]"
+                    " [magenta]▶︎[/magenta] "
+                    f"[cyan]{idx:>4}[/cyan]{bm}[green]{count:>3}[/green]{play}[white]{text}[/white]"
+                    "[/bold]"
+                )
+            else:
+                console.print(
+                    f"   [dim]{idx:>4}{bm}[green]{count:>3}[/green][/dim]{play}[dim]{text}[/dim]"
+                )
         hours, rem = divmod(int(total_seconds), 3600)
         minutes, seconds = divmod(rem, 60)
         time_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
@@ -698,6 +712,8 @@ class RichUI:
         sub_map: dict[int, Subtitle],
         page: int,
         cursor: int,
+        current_sub_index: int = -1,
+        play_counts: dict[int, int] | None = None,
     ) -> None:
         """북마크 목록 화면: 10개씩 페이지, 커서 이동 가능."""
         page_size = 10
@@ -712,13 +728,22 @@ class RichUI:
             expand=False,
         ))
         console.print(f"\n[bold cyan]── Bookmarks ──[/bold cyan]  [dim]({total} total)[/dim]\n")
+        console.print(self._STATS_SEG_HEADER)
+        bm = "  [yellow]*[/yellow]  "
         for i, sub_idx in enumerate(entries):
             abs_pos = start + i
             text = sub_map[sub_idx].text if sub_idx in sub_map else f"(subtitle {sub_idx})"
+            count = (play_counts or {}).get(sub_idx, 0)
+            play = "  [bold yellow]▶[/bold yellow]  " if sub_idx == current_sub_index else "     "
             if abs_pos == cursor:
-                console.print(f"  [bold magenta]▶︎[/bold magenta] [bold white]{sub_idx:>4}[/bold white]  [bold white]{text}[/bold white]")
+                console.print(
+                    "[bold]"
+                    " [magenta]▶︎[/magenta] "
+                    f"[cyan]{sub_idx:>4}[/cyan]{bm}[green]{count:>3}[/green]{play}[white]{text}[/white]"
+                    "[/bold]"
+                )
             else:
-                console.print(f"    [dim]{sub_idx:>4}  {text}[/dim]")
+                console.print(f"   [dim]{sub_idx:>4}[/dim]{bm}[dim green]{count:>3}[/dim green]{play}[dim]{text}[/dim]")
         console.print(f"\n[dim]Page {page + 1}/{page_count}[/dim]")
 
     def show_stats(self, total_play: int, subtitle_index: int, subtitle_play: int) -> None:

@@ -67,6 +67,7 @@ class AppController:
         self._showing_bookmarks: bool = False
         self._bookmark_page: int = 0
         self._bookmark_cursor: int = 0  # 북마크 목록 내 절대 커서 위치
+        self._stats_cursor: int = 0  # 통계 화면 내 절대 커서 위치
 
     def run(self) -> None:
         while True:
@@ -332,6 +333,10 @@ class AppController:
                         running = False
                     elif action in (Action.STATS_NEXT, Action.STATS_PREV):
                         self._handle_stats_page(1 if action == Action.STATS_NEXT else -1)
+                    elif action in (Action.NEXT, Action.PREV) and self._showing_stats:
+                        self._handle_stats_cursor(1 if action == Action.NEXT else -1)
+                    elif action == Action.BOOKMARK_SELECT and self._showing_stats:
+                        self._handle_stats_select()
                     elif action == Action.PRINT_STATS and self._showing_stats:
                         self._showing_stats = False
                         self._refresh_display()
@@ -1072,6 +1077,7 @@ class AppController:
             self.ui.show_message("[dim]No bookmarks yet. Press B to add one.[/dim]")
             return
         sub_map = {sub.index: sub for sub in self.subtitles}
+        play_counts = self.stats_store.load(self.media_path).subtitle_play_counts
         # 커서를 현재 구간과 가장 가까운 북마크 위치로 초기화
         current_sub_index = self.subtitles[self.current_index].index
         closest = min(range(len(bookmark_indices)), key=lambda i: abs(bookmark_indices[i] - current_sub_index))
@@ -1079,7 +1085,8 @@ class AppController:
         self._bookmark_page = closest // 10
         self._showing_bookmarks = True
         self.ui.clear()
-        self.ui.show_bookmark_list(bookmark_indices, sub_map, self._bookmark_page, self._bookmark_cursor)
+        self.ui.show_bookmark_list(bookmark_indices, sub_map, self._bookmark_page, self._bookmark_cursor,
+                                    current_sub_index=current_sub_index, play_counts=play_counts)
 
     def _handle_bookmark_cursor(self, direction: int) -> None:
         bookmark_indices = sorted(self._bookmarks)
@@ -1088,8 +1095,11 @@ class AppController:
         self._bookmark_cursor = max(0, min(len(bookmark_indices) - 1, self._bookmark_cursor + direction))
         self._bookmark_page = self._bookmark_cursor // 10
         sub_map = {sub.index: sub for sub in self.subtitles}
+        play_counts = self.stats_store.load(self.media_path).subtitle_play_counts
         self.ui.clear()
-        self.ui.show_bookmark_list(bookmark_indices, sub_map, self._bookmark_page, self._bookmark_cursor)
+        self.ui.show_bookmark_list(bookmark_indices, sub_map, self._bookmark_page, self._bookmark_cursor,
+                                    current_sub_index=self.subtitles[self.current_index].index,
+                                    play_counts=play_counts)
 
     def _handle_bookmark_page(self, direction: int) -> None:
         bookmark_indices = sorted(self._bookmarks)
@@ -1106,8 +1116,11 @@ class AppController:
         self._bookmark_page = new_page
         self._bookmark_cursor = new_page * 10  # 페이지 첫 항목으로 커서 이동
         sub_map = {sub.index: sub for sub in self.subtitles}
+        play_counts = self.stats_store.load(self.media_path).subtitle_play_counts
         self.ui.clear()
-        self.ui.show_bookmark_list(bookmark_indices, sub_map, self._bookmark_page, self._bookmark_cursor)
+        self.ui.show_bookmark_list(bookmark_indices, sub_map, self._bookmark_page, self._bookmark_cursor,
+                                    current_sub_index=self.subtitles[self.current_index].index,
+                                    play_counts=play_counts)
 
     def _handle_bookmark_select(self) -> None:
         """Enter: 선택한 북마크 구간으로 이동하고 LR모드로 복귀."""
@@ -1123,6 +1136,44 @@ class AppController:
             None,
         )
         self._showing_bookmarks = False
+        if target_list_index is not None:
+            self._save_back()
+            self.current_index = target_list_index
+            if self._mode == "R":
+                self._mode = "LR"
+        self._refresh_display()
+        self._play_current()
+
+    def _handle_stats_cursor(self, direction: int) -> None:
+        """통계 화면 커서 이동."""
+        total = len(self._stats_ranked)
+        if total == 0:
+            return
+        self._stats_cursor = max(0, min(total - 1, self._stats_cursor + direction))
+        self._stats_page = self._stats_cursor // 10
+        progress_pct = (self.current_index + 1) / len(self.subtitles) * 100
+        self.ui.clear()
+        self.ui.show_stats_header()
+        self.ui.show_learning_stats(
+            self._stats_ranked, self._stats_sub_map, self._stats_total_seconds,
+            self._stats_page, progress_pct,
+            current_sub_index=self.subtitles[self.current_index].index,
+            bookmarks=self._bookmarks,
+            cursor=self._stats_cursor,
+        )
+
+    def _handle_stats_select(self) -> None:
+        """Enter: 선택한 통계 항목 구간으로 이동하고 LR모드로 복귀."""
+        if not self._stats_ranked or self._stats_cursor >= len(self._stats_ranked):
+            self._showing_stats = False
+            self._refresh_display()
+            return
+        target_sub_index = self._stats_ranked[self._stats_cursor][0]
+        target_list_index = next(
+            (i for i, s in enumerate(self.subtitles) if s.index == target_sub_index),
+            None,
+        )
+        self._showing_stats = False
         if target_list_index is not None:
             self._save_back()
             self.current_index = target_list_index
@@ -1151,13 +1202,16 @@ class AppController:
         current_sub_index = self.subtitles[self.current_index].index
         ranked_indices = [idx for idx, _ in self._stats_ranked]
         pos = bisect.bisect_right(ranked_indices, current_sub_index) - 1
-        self._stats_page = max(0, pos) // 10
+        self._stats_cursor = max(0, pos)
+        self._stats_page = self._stats_cursor // 10
         self.ui.clear()
         self.ui.show_stats_header()
         self.ui.show_learning_stats(
             self._stats_ranked, self._stats_sub_map, self._stats_total_seconds,
             self._stats_page, progress_pct,
-            current_sub_index=self.subtitles[self.current_index].index,
+            current_sub_index=current_sub_index,
+            bookmarks=self._bookmarks,
+            cursor=self._stats_cursor,
         )
 
     def _handle_print_date_stats(self) -> None:
@@ -1202,12 +1256,15 @@ class AppController:
             self.ui.show_message("[red]This is the last page.[/red]")
             return
         self._stats_page = new_page
+        self._stats_cursor = new_page * 10  # 페이지 첫 항목으로 커서 이동
         self.ui.clear()
         self.ui.show_stats_header()
         self.ui.show_learning_stats(
             self._stats_ranked, self._stats_sub_map, self._stats_total_seconds,
             self._stats_page, progress_pct,
             current_sub_index=self.subtitles[self.current_index].index,
+            bookmarks=self._bookmarks,
+            cursor=self._stats_cursor,
         )
 
     def _refresh_display(self) -> None:
