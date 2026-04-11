@@ -84,13 +84,15 @@ class RichUI:
     def _run_menu(
         self,
         items: list[str],
+        dim_items: list[str] | None = None,
         *,
         draw_fn,
         selected: int = 0,
         allow_quit: bool = False,
         hint: str = "[dim]↑/↓: move  |  Enter: select  |  ESC: back[/dim]",
     ) -> int | None:
-        """화살표키 인터랙티브 메뉴. 선택 시 index(0-based), 취소 시 None, Q 종료 시 -1 반환."""
+        """화살표키 인터랙티브 메뉴. 선택 시 index(0-based), 취소 시 None, Q 종료 시 -1 반환.
+        dim_items: 비선택 시 표시할 별도 문자열 목록. None이면 items를 [dim]으로 감싸서 표시."""
         def _render(sel: int) -> None:
             draw_fn()
             console.print()
@@ -98,7 +100,8 @@ class RichUI:
                 if i == sel:
                     console.print(f"  [bold magenta]▶︎[/bold magenta] {item}")
                 else:
-                    console.print(f"    [dim]{item}[/dim]")
+                    dim_item = dim_items[i] if dim_items else f"[dim]{item}[/dim]"
+                    console.print(f"    {dim_item}")
             if hint:
                 console.print(f"\n{hint}")
 
@@ -235,20 +238,37 @@ class RichUI:
 
     def ask_resume_session(self, sessions: list[Session]) -> int | None:
         """Show session list for resuming. Returns index or None to cancel."""
-        def _seg(s: Session) -> str:
-            cur = s.current_index + 1
-            return f"{cur}/{s.total_segments}" if s.total_segments else str(cur)
+        bar_width = 20
 
-        items = [
-            f"{Path(s.media_path).name}  [dim](segment {_seg(s)})[/dim]"
-            for s in sessions
-        ]
+        def _stem(path: str) -> str:
+            name = Path(path).stem
+            if len(name) > 40:
+                name = name[:18] + "..." + name[-19:]
+            return name
+
+        def _bar(s: Session, bright: bool) -> str:
+            if s.total_segments > 0:
+                pct = min(1.0, (s.current_index + 1) / s.total_segments)
+                filled = round(pct * bar_width)
+            else:
+                filled = 0
+            empty = bar_width - filled
+            color = "green" if bright else "dim green"
+            empty_style = "dim" if bright else "dim"
+            return f"[{color}]{'█' * filled}[/{color}][{empty_style}]{'░' * empty}[/{empty_style}]"
+
+        def _line(s: Session, bright: bool) -> str:
+            name = _stem(s.media_path)
+            return f"{name:<40}  {_bar(s, bright)}"
+
+        items     = [_line(s, bright=True)  for s in sessions]
+        dim_items = [_line(s, bright=False) for s in sessions]
 
         def _header():
             self.show_welcome()
             console.print("\n[bold]Select session to resume:[/bold]")
 
-        return self._run_menu(items, draw_fn=_header)
+        return self._run_menu(items, dim_items, draw_fn=_header)
 
     def ask_delete_session(self, sessions: list[Session]) -> int | None:
         items = [
