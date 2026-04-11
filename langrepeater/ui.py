@@ -232,18 +232,18 @@ class RichUI:
         for idx in indices:
             sub = subtitles[idx]
             display_text = self._mask_text(sub.text) if masked else sub.text
-            bm_marker = " * " if (bookmarks and sub.index in bookmarks) else "   "
+            bm_marker = "  *  " if (bookmarks and sub.index in bookmarks) else "     "
             if idx == current_index:
                 ts = f"[{sub.start:.2f}s ~ {sub.end:.2f}s]"
                 line = Text()
-                line.append(f"{sub.index:>4}", style="dim bold cyan")
-                line.append(bm_marker, style="bold white")
+                line.append(f"{sub.index:>4}", style="bold cyan")
+                line.append(bm_marker, style="bold yellow")
                 line.append(display_text, style="bold white")
                 line.append(f"  {ts}", style="dim bold cyan")
                 console.print(line)
             else:
                 bm_str = f"[dim bold yellow]{bm_marker}[/dim bold yellow]" if (bookmarks and sub.index in bookmarks) else bm_marker
-                console.print(f"[dim white]{sub.index:>4}[/dim white]{bm_str}[dim white]{display_text}[/dim white]")
+                console.print(f"[dim cyan]{sub.index:>4}[/dim cyan]{bm_str}[dim white]{display_text}[/dim white]")
 
     def show_home_menu(self, has_sessions: bool) -> str:
         """Show home menu. Returns: 'resume'|'new'|'url'|'delete'|'quit'."""
@@ -440,18 +440,18 @@ class RichUI:
         """Print animation bar as a new line (call after show_subtitles)."""
         bar = self._make_animation_bar(progress)
         if dim:
-            sys.stdout.write(f"\n\033[2m      {bar}\033[0m\n")
+            sys.stdout.write(f"\n\033[2m         {bar}\033[0m\n")
         else:
-            sys.stdout.write(f"\n      {bar}\n")
+            sys.stdout.write(f"\n         {bar}\n")
         sys.stdout.flush()
 
     def update_animation_line(self, progress: float, dim: bool = False) -> None:
         """Overwrite animation bar in-place (cursor must be on the line after the bar)."""
         bar = self._make_animation_bar(progress)
         if dim:
-            sys.stdout.write(f"\033[1A\r\033[2K\033[2m      {bar}\033[0m\n")
+            sys.stdout.write(f"\033[1A\r\033[2K\033[2m         {bar}\033[0m\n")
         else:
-            sys.stdout.write(f"\033[1A\r\033[2K      {bar}\n")
+            sys.stdout.write(f"\033[1A\r\033[2K         {bar}\n")
         sys.stdout.flush()
 
     def show_message(self, msg: str) -> None:
