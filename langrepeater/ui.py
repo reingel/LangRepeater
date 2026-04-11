@@ -20,7 +20,7 @@ class RichUI:
         "[dim]V: show/hide subtitle  |  G: goto             |  Q: quit       |  ESC: home[/dim]\n"
         "[dim]S: replay              |  U: merge with next  |  I: split      |  T: transcribe[/dim]\n"
         "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s  |  .: end +0.1s[/dim]\n"
-        "[dim]P: segment stats       |  0: date stats[/dim]"
+        "[dim]P: segment stats       |  0: date stats       |  B: bookmark   |  -: bookmark list[/dim]"
     )
     _HELP_TEXT_R = (
         "[dim]Space: play/pause      |  A/←/↑: prev         |  D/→/↓: next   |  [: prev 3  |  ]: next 3[/dim]\n"
@@ -104,7 +104,7 @@ class RichUI:
             return text
         return words[0] + " " + " ".join(RichUI._mask_word(w) for w in words[1:-1]) + " " + words[-1]
 
-    def show_subtitles(self, subtitles: list[Subtitle], current_index: int, masked: bool = True, review_total: int | None = None) -> None:
+    def show_subtitles(self, subtitles: list[Subtitle], current_index: int, masked: bool = True, review_total: int | None = None, bookmarks: set[int] | None = None) -> None:
         n = len(subtitles)
         # determine which 3 to display
         if n == 0:
@@ -140,15 +140,18 @@ class RichUI:
         for idx in indices:
             sub = subtitles[idx]
             display_text = self._mask_text(sub.text) if masked else sub.text
+            bm_marker = " * " if (bookmarks and sub.index in bookmarks) else "   "
             if idx == current_index:
                 ts = f"[{sub.start:.2f}s ~ {sub.end:.2f}s]"
                 line = Text()
-                line.append(f"{sub.index:>4}  ", style="dim bold cyan")
+                line.append(f"{sub.index:>4}", style="dim bold cyan")
+                line.append(bm_marker, style="bold white")
                 line.append(display_text, style="bold white")
                 line.append(f"  {ts}", style="dim bold cyan")
                 console.print(line)
             else:
-                console.print(f"[dim white]{sub.index:>4}  {display_text}[/dim white]")
+                bm_str = f"[dim bold yellow]{bm_marker}[/dim bold yellow]" if (bookmarks and sub.index in bookmarks) else bm_marker
+                console.print(f"[dim white]{sub.index:>4}[/dim white]{bm_str}[dim white]{display_text}[/dim white]")
 
     def show_home_menu(self, has_sessions: bool) -> str:
         """Show home menu. Returns: 'resume'|'new'|'url'|'url:<url>'|'delete'|'quit'."""
@@ -558,6 +561,34 @@ class RichUI:
             marker = "[yellow]▶[/yellow]" if date_str == today_str else " "
             console.print(f"{marker} [cyan]{date_str}[/cyan][white]  {subtitle_count:>6}   {repeat_count:>6}     {time_str:>11}  {bar}")
         page_count = max(1, -(-total // page_size))
+        console.print(f"\n[dim]Page {page + 1}/{page_count}[/dim]")
+
+    def show_bookmark_list(
+        self,
+        bookmark_indices: list[int],
+        sub_map: dict[int, Subtitle],
+        page: int,
+        cursor: int,
+    ) -> None:
+        """북마크 목록 화면: 10개씩 페이지, 커서 이동 가능."""
+        page_size = 10
+        total = len(bookmark_indices)
+        start = page * page_size
+        end = min(start + page_size, total)
+        entries = bookmark_indices[start:end]
+        page_count = max(1, -(-total // page_size))
+
+        console.print(Panel(
+            self._HEADER_TEXT + "\n\n"
+            "[dim]↑/↓: move cursor  |  [/dim][dim]][: next page  |  [: prev page  |  Enter: go  |  any key: back[/dim]",
+            expand=False,
+        ))
+        console.print(f"\n[bold cyan]── Bookmarks ──[/bold cyan]  [dim]({total} total)[/dim]\n")
+        for i, sub_idx in enumerate(entries):
+            abs_pos = start + i
+            arrow = "[bold yellow]→[/bold yellow] " if abs_pos == cursor else "  "
+            text = sub_map[sub_idx].text if sub_idx in sub_map else f"(subtitle {sub_idx})"
+            console.print(f"{arrow}[dim white]{sub_idx:>4}[/dim white]  [white]{text}[/white]")
         console.print(f"\n[dim]Page {page + 1}/{page_count}[/dim]")
 
     def show_stats(self, total_play: int, subtitle_index: int, subtitle_play: int) -> None:

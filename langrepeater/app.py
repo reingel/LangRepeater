@@ -7,6 +7,7 @@ import tty
 from pathlib import Path
 
 from .core.audio_player import AudioPlayer, create_player
+from .core.bookmark_store import BookmarkStore
 from .core.file_finder import FileFinder
 from .core.models import Session, Subtitle
 from .core.progress_store import ProgressStore
@@ -29,6 +30,7 @@ class AppController:
         self.ui = RichUI()
         self.progress_store = ProgressStore()
         self.stats_store = StatsStore()
+        self.bookmark_store = BookmarkStore()
         self.file_finder = FileFinder()
         self.srt_parser = SRTParser()
         self.player: AudioPlayer | None = None
@@ -61,6 +63,10 @@ class AppController:
         self._review_lr_return_index: int = 0  # R모드 → LR모드 복귀 시 돌아갈 인덱스
         self._back_index: int = -1  # BACK 키 복귀용 이전 자막 인덱스 (-1 = 없음)
         self._back_review_index: int = 0  # R모드 BACK 키 복귀용 이전 review_index
+        self._bookmarks: set[int] = set()  # 현재 미디어의 북마크된 1-based 자막 인덱스
+        self._showing_bookmarks: bool = False
+        self._bookmark_page: int = 0
+        self._bookmark_cursor: int = 0  # 북마크 목록 내 절대 커서 위치
 
     def run(self) -> None:
         while True:
@@ -243,6 +249,7 @@ class AppController:
     def _load_subtitles(self) -> None:
         self.subtitles = self.srt_parser.load(self.srt_path)
         self.all_word_timestamps = self.srt_parser.load_words_json(self.srt_path) or self.srt_parser.load_words_yaml(self.srt_path)
+        self._bookmarks = self.bookmark_store.load(self.media_path)
 
     def _init_player(self) -> None:
         self.player = create_player(self.media_path)
@@ -265,7 +272,7 @@ class AppController:
             while running:
                 action = read_action(fd, timeout=0.1)
                 if action is None:
-                    if not self._showing_stats and not self._showing_date_stats:
+                    if not self._showing_stats and not self._showing_date_stats and not self._showing_bookmarks:
                         is_playing = self.player is not None and self.player.is_playing()
                         if self._mode == "L" and self.subtitles:
                             if is_playing:
@@ -289,6 +296,23 @@ class AppController:
                             elif self._was_playing and not self._paused:
                                 self.ui.update_animation_line(1.0, dim=True)
                         self._was_playing = is_playing
+                    continue
+
+                if self._showing_bookmarks:
+                    if action == Action.QUIT:
+                        self._handle_quit()
+                        running = False
+                    elif action in (Action.NEXT, Action.PREV):
+                        self._handle_bookmark_cursor(1 if action == Action.NEXT else -1)
+                    elif action == Action.STATS_NEXT:
+                        self._handle_bookmark_page(1)
+                    elif action == Action.STATS_PREV:
+                        self._handle_bookmark_page(-1)
+                    elif action == Action.BOOKMARK_SELECT:
+                        self._handle_bookmark_select()
+                    else:
+                        self._showing_bookmarks = False
+                        self._refresh_display()
                     continue
 
                 if self._showing_stats or self._showing_date_stats:
@@ -404,6 +428,10 @@ class AppController:
                     self._handle_shift_end(-0.1)
                 elif action == Action.SHIFT_END_LATER:
                     self._handle_shift_end(0.1)
+                elif action == Action.BOOKMARK:
+                    self._handle_bookmark_toggle()
+                elif action == Action.BOOKMARK_LIST:
+                    self._handle_bookmark_list()
                 elif action == Action.PRINT_STATS:
                     self._handle_print_stats()
                     self._showing_stats = True
@@ -999,6 +1027,82 @@ class AppController:
         for i, sub in enumerate(self.subtitles):
             sub.index = i + 1
 
+    def _handle_bookmark_toggle(self) -> None:
+        if not self.subtitles:
+            return
+        sub_index = self.subtitles[self.current_index].index
+        self.bookmark_store.toggle(self.media_path, sub_index)
+        self._bookmarks = self.bookmark_store.load(self.media_path)
+        self._refresh_display()
+
+    def _handle_bookmark_list(self) -> None:
+        if not self.subtitles:
+            return
+        bookmark_indices = sorted(self._bookmarks)
+        if not bookmark_indices:
+            self._refresh_display()
+            self.ui.show_message("[dim]No bookmarks yet. Press B to add one.[/dim]")
+            return
+        sub_map = {sub.index: sub for sub in self.subtitles}
+        # 커서를 현재 구간과 가장 가까운 북마크 위치로 초기화
+        current_sub_index = self.subtitles[self.current_index].index
+        closest = min(range(len(bookmark_indices)), key=lambda i: abs(bookmark_indices[i] - current_sub_index))
+        self._bookmark_cursor = closest
+        self._bookmark_page = closest // 10
+        self._showing_bookmarks = True
+        self.ui.clear()
+        self.ui.show_bookmark_list(bookmark_indices, sub_map, self._bookmark_page, self._bookmark_cursor)
+
+    def _handle_bookmark_cursor(self, direction: int) -> None:
+        bookmark_indices = sorted(self._bookmarks)
+        if not bookmark_indices:
+            return
+        self._bookmark_cursor = max(0, min(len(bookmark_indices) - 1, self._bookmark_cursor + direction))
+        self._bookmark_page = self._bookmark_cursor // 10
+        sub_map = {sub.index: sub for sub in self.subtitles}
+        self.ui.clear()
+        self.ui.show_bookmark_list(bookmark_indices, sub_map, self._bookmark_page, self._bookmark_cursor)
+
+    def _handle_bookmark_page(self, direction: int) -> None:
+        bookmark_indices = sorted(self._bookmarks)
+        if not bookmark_indices:
+            return
+        page_count = max(1, -(-len(bookmark_indices) // 10))
+        new_page = self._bookmark_page + direction
+        if new_page < 0:
+            self.ui.show_message("[red]This is the first page.[/red]")
+            return
+        if new_page >= page_count:
+            self.ui.show_message("[red]This is the last page.[/red]")
+            return
+        self._bookmark_page = new_page
+        self._bookmark_cursor = new_page * 10  # 페이지 첫 항목으로 커서 이동
+        sub_map = {sub.index: sub for sub in self.subtitles}
+        self.ui.clear()
+        self.ui.show_bookmark_list(bookmark_indices, sub_map, self._bookmark_page, self._bookmark_cursor)
+
+    def _handle_bookmark_select(self) -> None:
+        """Enter: 선택한 북마크 구간으로 이동하고 LR모드로 복귀."""
+        bookmark_indices = sorted(self._bookmarks)
+        if not bookmark_indices or self._bookmark_cursor >= len(bookmark_indices):
+            self._showing_bookmarks = False
+            self._refresh_display()
+            return
+        target_sub_index = bookmark_indices[self._bookmark_cursor]
+        # 1-based subtitle index → 0-based list index
+        target_list_index = next(
+            (i for i, s in enumerate(self.subtitles) if s.index == target_sub_index),
+            None,
+        )
+        self._showing_bookmarks = False
+        if target_list_index is not None:
+            self._save_back()
+            self.current_index = target_list_index
+            if self._mode == "R":
+                self._mode = "LR"
+        self._refresh_display()
+        self._play_current()
+
     def _handle_print_stats(self) -> None:
         if not self.subtitles:
             return
@@ -1083,9 +1187,9 @@ class AppController:
         self.ui.show_study_header(self._mode)
         if self._mode == "R" and self._review_list:
             review_subs = [self.subtitles[i] for i in self._review_list]
-            self.ui.show_subtitles(review_subs, self._review_index, masked=self._subtitle_masked, review_total=len(self._review_list))
+            self.ui.show_subtitles(review_subs, self._review_index, masked=self._subtitle_masked, review_total=len(self._review_list), bookmarks=self._bookmarks)
         else:
-            self.ui.show_subtitles(self.subtitles, self.current_index, masked=self._subtitle_masked)
+            self.ui.show_subtitles(self.subtitles, self.current_index, masked=self._subtitle_masked, bookmarks=self._bookmarks)
         if self.player and self.player.is_playing() and self._play_duration > 0:
             elapsed = time.monotonic() - self._play_start_time
             progress = min(1.0, elapsed / self._play_duration)
