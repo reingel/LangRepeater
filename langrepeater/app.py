@@ -514,20 +514,35 @@ class AppController:
         if len(valid) < 10:
             return None
 
-        # 중복 없는 그룹 풀 구성 (대표값 = min index 기준 dedup)
-        seen_reps: set[int] = set()
+        # 중복 없는 그룹 풀 구성 (멤버 기반 merge: rep 기반 skip → 겹치면 병합)
+        member_to_pool_idx: dict[int, int] = {}
         pool: list[list[int]] = []   # 각 원소는 0-based 인덱스 그룹
         pool_weights: list[float] = []
         for idx in sorted(valid.keys()):
             group = self._expand_to_siblings(idx)
-            rep = min(group)
-            if rep in seen_reps:
-                continue
-            seen_reps.add(rep)
-            weight = float(sum(valid.get(i, 0) for i in group))
-            if weight > 0:
-                pool.append(group)
-                pool_weights.append(weight)
+            # 기존 풀 항목과 겹치는 멤버가 있으면 해당 항목에 병합
+            target_pi: int | None = None
+            for member in group:
+                if member in member_to_pool_idx:
+                    target_pi = member_to_pool_idx[member]
+                    break
+            if target_pi is not None:
+                existing = set(pool[target_pi])
+                for member in group:
+                    if member not in existing:
+                        pool[target_pi].append(member)
+                        existing.add(member)
+                        member_to_pool_idx[member] = target_pi
+                pool[target_pi].sort()
+                pool_weights[target_pi] = float(sum(valid.get(i, 0) for i in pool[target_pi]))
+            else:
+                weight = float(sum(valid.get(i, 0) for i in group))
+                if weight > 0:
+                    pi = len(pool)
+                    pool.append(list(group))
+                    pool_weights.append(weight)
+                    for member in group:
+                        member_to_pool_idx[member] = pi
 
         if len(pool) < 10:
             return None
