@@ -51,23 +51,23 @@ class RichUI:
         """Study screen header: program name + description + mode + key bindings."""
         if mode == "L":
             mode_line = (
-                "[dim]1: Review mode[/dim]  |  "
-                "[dim]2: Listen & Repeat mode[/dim]  |  "
-                "[bold yellow]3: Listening mode[/bold yellow]"
+                "[dim]1: Review [/dim]  |  "
+                "[dim]2: Listen & Repeat [/dim]  |  "
+                "[bold yellow]3: Listening [/bold yellow]"
             )
             help_text = self._HELP_TEXT_L
         elif mode == "R":
             mode_line = (
-                "[bold green]1: Review mode[/bold green]  |  "
-                "[dim]2: Listen & Repeat mode[/dim]  |  "
-                "[dim]3: Listening mode[/dim]"
+                "[bold green]1: Review [/bold green]  |  "
+                "[dim]2: Listen & Repeat [/dim]  |  "
+                "[dim]3: Listening [/dim]"
             )
             help_text = self._HELP_TEXT_R
         else:
             mode_line = (
-                "[dim]1: Review mode[/dim]  |  "
-                "[bold white]2: Listen & Repeat mode[/bold white]  |  "
-                "[dim]3: Listening mode[/dim]"
+                "[dim]1: Review [/dim]  |  "
+                "[bold white]2: Listen & Repeat [/bold white]  |  "
+                "[dim]3: Listening [/dim]"
             )
             help_text = self._HELP_TEXT_LR
         border_style = "yellow" if mode == "L" else "green" if mode == "R" else ""
