@@ -1,4 +1,8 @@
+import os
+import select as _select
 import sys
+import termios
+import tty
 from pathlib import Path
 
 from rich.console import Console
@@ -77,20 +81,69 @@ class RichUI:
             border_style=border_style,
         ))
 
+    def _run_menu(
+        self,
+        items: list[str],
+        *,
+        draw_fn,
+        selected: int = 0,
+        allow_quit: bool = False,
+        hint: str = "[dim]↑/↓: move  |  Enter: select  |  ESC: back[/dim]",
+    ) -> int | None:
+        """화살표키 인터랙티브 메뉴. 선택 시 index(0-based), 취소 시 None, Q 종료 시 -1 반환."""
+        def _render(sel: int) -> None:
+            draw_fn()
+            console.print()
+            for i, item in enumerate(items):
+                if i == sel:
+                    console.print(f"  [bold magenta]▶︎[/bold magenta] {item}")
+                else:
+                    console.print(f"    [dim]{item}[/dim]")
+            if hint:
+                console.print(f"\n{hint}")
+
+        selected = max(0, min(len(items) - 1, selected))
+        _render(selected)
+
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            while True:
+                rlist, _, _ = _select.select([fd], [], [], 1.0)
+                if not rlist:
+                    continue
+                ch = os.read(fd, 1)
+
+                if ch == b'\x1b':
+                    r2, _, _ = _select.select([fd], [], [], 0.05)
+                    if not r2:
+                        return None  # bare ESC
+                    ch2 = os.read(fd, 1)
+                    if ch2 == b'[':
+                        r3, _, _ = _select.select([fd], [], [], 0.05)
+                        if r3:
+                            ch3 = os.read(fd, 1)
+                            if ch3 == b'A':   # ↑
+                                selected = max(0, selected - 1)
+                                _render(selected)
+                            elif ch3 == b'B': # ↓
+                                selected = min(len(items) - 1, selected + 1)
+                                _render(selected)
+                elif ch in (b'\r', b'\n'):
+                    return selected
+                elif allow_quit and ch in (b'q', b'Q'):
+                    return -1
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
     def show_file_list(self, files: list[str], prompt: str) -> int | None:
-        self.show_welcome()
-        console.print(f"\n[bold]{prompt}[/bold]")
-        for i, f in enumerate(files, 1):
-            console.print(f"  [cyan]{i}[/cyan]. {Path(f).name}")
-        while True:
-            raw = console.input(f"\nEnter number (1-{len(files)}) or C to cancel: ").strip()
-            if raw.lower() == "c":
-                return None
-            if raw.isdigit():
-                n = int(raw)
-                if 1 <= n <= len(files):
-                    return n - 1
-            console.print("[red]Please enter a valid number.[/red]")
+        def _header():
+            self.show_welcome()
+            console.print(f"\n[bold]{prompt}[/bold]")
+
+        items = [Path(f).name for f in files]
+        return self._run_menu(items, draw_fn=_header)
 
     @staticmethod
     def _mask_word(word: str) -> str:
@@ -154,89 +207,71 @@ class RichUI:
                 console.print(f"[dim white]{sub.index:>4}[/dim white]{bm_str}[dim white]{display_text}[/dim white]")
 
     def show_home_menu(self, has_sessions: bool) -> str:
-        """Show home menu. Returns: 'resume'|'new'|'url'|'url:<url>'|'delete'|'quit'."""
-        console.print()
-        n = 1
+        """Show home menu. Returns: 'resume'|'new'|'url'|'delete'|'quit'."""
+        items: list[str] = []
+        keys: list[str] = []
         if has_sessions:
-            console.print(f"  [cyan]{n}[/cyan]. Continue previous session")
-            n += 1
-        console.print(f"  [cyan]{n}[/cyan]. Open a new file")
-        n += 1
-        console.print(f"  [cyan]{n}[/cyan]. Enter URL")
-        n += 1
+            items.append("Continue previous session")
+            keys.append("resume")
+        items.append("Open a new file")
+        keys.append("new")
+        items.append("Enter URL")
+        keys.append("url")
         if has_sessions:
-            console.print(f"  [cyan]{n}[/cyan]. Delete a session")
-            n += 1
-        total = n - 1
-        console.print(f"\n  [dim]Q: Quit[/dim]")
-        while True:
-            raw = console.input(f"\nEnter number (1-{total}) or Q to quit: ").strip()
-            if raw.lower() == "q":
-                return "quit"
-            if raw.startswith(("http://", "https://")):
-                return f"url:{raw}"
-            if raw.isdigit():
-                val = int(raw)
-                idx = 1
-                if has_sessions:
-                    if val == idx:
-                        return "resume"
-                    idx += 1
-                if val == idx:
-                    return "new"
-                idx += 1
-                if val == idx:
-                    return "url"
-                idx += 1
-                if has_sessions and val == idx:
-                    return "delete"
-            console.print("[red]Please enter a valid number.[/red]")
+            items.append("Delete a session")
+            keys.append("delete")
+
+        def _header():
+            console.clear()
+            console.print(Panel(self._HEADER_TEXT, expand=False))
+
+        result = self._run_menu(
+            items, draw_fn=_header, allow_quit=True,
+            hint="[dim]↑/↓: move  |  Enter: select  |  Q: quit[/dim]",
+        )
+        if result is None or result == -1:
+            return "quit"
+        return keys[result]
 
     def ask_resume_session(self, sessions: list[Session]) -> int | None:
         """Show session list for resuming. Returns index or None to cancel."""
-        self.show_welcome()
-        console.print("\n[bold]Select session to resume:[/bold]")
-        for i, s in enumerate(sessions, 1):
-            marker = "[yellow]▶[/yellow] " if i == 1 else "  "
-            console.print(
-                f"{marker}[cyan]{i}[/cyan]. {Path(s.media_path).name}  "
-                f"[dim](segment {s.current_index + 1})[/dim]"
-            )
-        while True:
-            raw = console.input(f"\nEnter number (1-{len(sessions)}) or C to cancel: ").strip()
-            if raw == "":
-                return 0
-            if raw.lower() == "c":
-                return None
-            if raw.isdigit():
-                n = int(raw)
-                if 1 <= n <= len(sessions):
-                    return n - 1
-            console.print("[red]Please enter a valid number.[/red]")
+        def _seg(s: Session) -> str:
+            cur = s.current_index + 1
+            return f"{cur}/{s.total_segments}" if s.total_segments else str(cur)
+
+        items = [
+            f"{Path(s.media_path).name}  [dim](segment {_seg(s)})[/dim]"
+            for s in sessions
+        ]
+
+        def _header():
+            self.show_welcome()
+            console.print("\n[bold]Select session to resume:[/bold]")
+
+        return self._run_menu(items, draw_fn=_header)
 
     def ask_delete_session(self, sessions: list[Session]) -> int | None:
-        self.show_welcome()
-        console.print("\n[bold]Select session to delete:[/bold]")
-        for i, s in enumerate(sessions, 1):
-            console.print(
-                f"  [cyan]{i}[/cyan]. {Path(s.media_path).name}  "
-                f"[dim](segment {s.current_index + 1})[/dim]"
-            )
-        while True:
-            raw = console.input(f"\nEnter number (1-{len(sessions)}) or C to cancel: ").strip()
-            if raw.lower() == "c":
-                return None
-            if raw.isdigit():
-                n = int(raw)
-                if 1 <= n <= len(sessions):
-                    return n - 1
-            console.print("[red]Please enter a valid number.[/red]")
+        items = [
+            f"{Path(s.media_path).name}  [dim](segment {s.current_index + 1})[/dim]"
+            for s in sessions
+        ]
+
+        def _header():
+            self.show_welcome()
+            console.print("\n[bold]Select session to delete:[/bold]")
+
+        return self._run_menu(items, draw_fn=_header)
 
     def confirm_delete(self, session: Session) -> bool:
-        self.show_welcome()
         name = Path(session.media_path).name
-        raw = console.input(f"\nDelete [bold]{name}[/bold]? (y/N): ").strip().lower()
-        return raw == "y"
+        items = ["Yes, delete", "Cancel"]
+
+        def _header():
+            self.show_welcome()
+            console.print(f"\nDelete [bold]{name}[/bold]?")
+
+        result = self._run_menu(items, draw_fn=_header, selected=1)
+        return result == 0
 
     @staticmethod
     def _open_file_dialog(initial_dir: str = "~") -> str | None:
@@ -261,24 +296,26 @@ class RichUI:
             return None
 
     def ask_folder(self, previous_dir: str) -> str | None:
-        self.show_welcome()
-        console.print("\n[bold]Select folder:[/bold]")
-        console.print(f"  [cyan]1[/cyan]. Same folder: [dim]{previous_dir}[/dim]")
-        console.print(f"  [cyan]2[/cyan]. Different folder")
+        items = [
+            f"Same folder: [dim]{previous_dir}[/dim]",
+            "Different folder",
+        ]
+
+        def _header():
+            self.show_welcome()
+            console.print("\n[bold]Select folder:[/bold]")
+
         while True:
-            raw = console.input("\nEnter number (1-2) or C to cancel: ").strip()
-            if raw.lower() == "c":
+            result = self._run_menu(items, draw_fn=_header)
+            if result is None:
                 return None
-            if raw == "1":
+            if result == 0:
                 return previous_dir
-            if raw == "2":
-                console.print("[dim]Opening file dialog...[/dim]")
-                path = self._open_file_dialog(previous_dir)
-                if path is None:
-                    console.print("[yellow]Dialog cancelled.[/yellow]")
-                    continue
+            # result == 1: open file dialog
+            path = self._open_file_dialog(previous_dir)
+            if path is not None:
                 return path
-            console.print("[red]Please enter 1 or 2.[/red]")
+            # dialog cancelled → loop back to menu
 
     def ask_split_point(self, subtitle, fd: int) -> int | None:
         """Show split point candidates. Returns char position or None to cancel."""
@@ -368,9 +405,65 @@ class RichUI:
     def show_message(self, msg: str) -> None:
         console.print(msg)
 
+    def wait_for_enter(self) -> None:
+        """Enter 키 입력을 기다린다."""
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            while True:
+                rlist, _, _ = _select.select([fd], [], [], 1.0)
+                if not rlist:
+                    continue
+                ch = os.read(fd, 1)
+                if ch in (b'\r', b'\n', b'\x1b'):
+                    break
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
     def ask_path(self, prompt: str) -> str | None:
-        val = console.input(f"{prompt} (or C to cancel): ").strip()
-        return None if val.lower() == "c" else val
+        """텍스트 입력 프롬프트. ESC로 취소, Enter로 확정."""
+        sys.stdout.write(f"{prompt}: ")
+        sys.stdout.flush()
+        buf: list[str] = []
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            while True:
+                rlist, _, _ = _select.select([fd], [], [], 1.0)
+                if not rlist:
+                    continue
+                ch = os.read(fd, 1)
+                if ch in (b'\r', b'\n'):
+                    sys.stdout.write('\n')
+                    sys.stdout.flush()
+                    val = ''.join(buf).strip()
+                    return val if val else None
+                elif ch == b'\x1b':
+                    # ESC or escape sequence → cancel
+                    r2, _, _ = _select.select([fd], [], [], 0.05)
+                    if r2:
+                        os.read(fd, 1)  # consume '[' or similar
+                        r3, _, _ = _select.select([fd], [], [], 0.05)
+                        if r3:
+                            os.read(fd, 1)  # consume final byte
+                    sys.stdout.write('\n')
+                    sys.stdout.flush()
+                    return None
+                elif ch in (b'\x7f', b'\x08'):  # Backspace
+                    if buf:
+                        buf.pop()
+                        sys.stdout.write('\r\033[K' + f"{prompt}: " + ''.join(buf))
+                        sys.stdout.flush()
+                else:
+                    char = ch.decode('utf-8', errors='ignore')
+                    if char.isprintable():
+                        buf.append(char)
+                        sys.stdout.write(char)
+                        sys.stdout.flush()
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
     def ask_goto_number(self, total: int) -> int | None:
         """번호로 이동: 1~total 범위의 순번을 입력받아 반환. 취소 시 None."""
