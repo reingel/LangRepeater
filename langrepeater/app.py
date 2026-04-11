@@ -150,7 +150,7 @@ class AppController:
 
         if url is None:
             url = self.ui.ask_path("Enter URL")
-        if not url or url.strip().lower() == "c":
+        if not url:
             return False
 
         output_dir = str(Path.home() / "Downloads" / "LangRepeater")
@@ -158,7 +158,11 @@ class AppController:
         try:
             audio_path = url_loader.download(url, output_dir)
         except Exception as e:
-            self.ui.show_message(f"[red]Download failed: {e}[/red]")
+            import re as _re
+            msg = _re.sub(r'\x1b\[[0-9;]*m', '', str(e)).strip()
+            self.ui.show_message(f"[red]Download failed:[/red] {msg}")
+            self.ui.show_message("[dim]Press Enter to continue...[/dim]")
+            self.ui.wait_for_enter()
             return False
 
         self.ui.show_message("[dim]Transcribing with Whisper...[/dim]")
@@ -250,6 +254,13 @@ class AppController:
         self.subtitles = self.srt_parser.load(self.srt_path)
         self.all_word_timestamps = self.srt_parser.load_words_json(self.srt_path) or self.srt_parser.load_words_yaml(self.srt_path)
         self._bookmarks = self.bookmark_store.load(self.media_path)
+        # total_segments를 즉시 저장하여 세션 목록에 반영
+        self.progress_store.upsert(Session(
+            media_path=self.media_path,
+            srt_path=self.srt_path,
+            current_index=self.current_index,
+            total_segments=len(self.subtitles),
+        ))
 
     def _init_player(self) -> None:
         self.player = create_player(self.media_path)
@@ -500,6 +511,7 @@ class AppController:
             media_path=self.media_path,
             srt_path=self.srt_path,
             current_index=self.current_index,
+            total_segments=len(self.subtitles),
         ))
         if self.subtitles:
             self.stats_store.update_progress(

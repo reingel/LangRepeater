@@ -22,6 +22,7 @@ class Session:
     media_path: str
     srt_path: str
     current_index: int  # 0-based index into subtitle list
+    total_segments: int = 0
 
 
 @dataclass

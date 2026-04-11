@@ -22,6 +22,7 @@ class ProgressStore:
                     media_path=s["media_path"],
                     srt_path=s["srt_path"],
                     current_index=s.get("current_index", 0),
+                    total_segments=s.get("total_segments", 0),
                 )
                 for s in sessions
             ]
@@ -35,6 +36,7 @@ class ProgressStore:
                     "media_path": s.media_path,
                     "srt_path": s.srt_path,
                     "current_index": s.current_index,
+                    "total_segments": s.total_segments,
                 }
                 for s in sessions
             ]
