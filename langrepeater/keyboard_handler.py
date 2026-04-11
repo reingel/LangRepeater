@@ -28,6 +28,9 @@ class Action(Enum):
     MODE_REVIEW = auto()
     REVIEW = auto()
     BACK = auto()
+    BOOKMARK = auto()
+    BOOKMARK_LIST = auto()
+    BOOKMARK_SELECT = auto()
 
 
 _CHAR_MAP: dict[str, Action] = {
@@ -53,6 +56,8 @@ _CHAR_MAP: dict[str, Action] = {
     "t": Action.TRANSCRIBE,
     "g": Action.GOTO,
     "r": Action.REVIEW,
+    "b": Action.BOOKMARK,
+    "-": Action.BOOKMARK_LIST,
 }
 
 
@@ -88,6 +93,9 @@ def read_action(fd: int, timeout: float = 0.1) -> Action | None:
 
     if ch in (b"\x7f", b"\x08"):  # Backspace / Delete
         return Action.BACK
+
+    if ch in (b"\r", b"\n"):  # Enter
+        return Action.BOOKMARK_SELECT
 
     char = ch.decode("utf-8", errors="ignore").lower()
     return _CHAR_MAP.get(char)
