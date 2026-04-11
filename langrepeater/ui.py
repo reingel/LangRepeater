@@ -15,33 +15,79 @@ console = Console()
 
 
 class RichUI:
-    _HELP_TEXT_L = (
-        "[dim]Space: play/pause      |  A/←/↑: prev         |  D/→/↓: next   |  [: prev 3  |  ]: next 3[/dim]\n"
-        "[dim]V: show/hide subtitle  |  G: goto             |  Q: quit       |  ESC: home[/dim]"
-    )
-    _HELP_TEXT_LR = (
-        "[dim]Space: play/pause      |  A/←/↑: prev         |  D/→/↓: next   |  [: prev 3  |  ]: next 3[/dim]\n"
-        "[dim]V: show/hide subtitle  |  G: goto             |  Q: quit       |  ESC: home[/dim]\n"
-        "[dim]S: replay              |  U: merge with next  |  I: split      |  T: transcribe[/dim]\n"
-        "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s  |  .: end +0.1s[/dim]\n"
-        "[dim]P: segment stats       |  0: date stats       |  B: bookmark   |  -: bookmark list[/dim]"
-    )
-    _HELP_TEXT_R = (
-        "[dim]Space: play/pause      |  A/←/↑: prev         |  D/→/↓: next   |  [: prev 3  |  ]: next 3[/dim]\n"
-        "[dim]V: show/hide subtitle  |  S: replay           |  T: transcribe |  Q: quit    |  ESC: home[/dim]\n"
-        "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s  |  .: end +0.1s[/dim]\n"
-        "[dim]P: segment stats       |  0: date stats       |  R: resample[/dim]"
-    )
-    _HELP_TEXT_STATS = (
-        "[dim][: prev page  |  ]: next page  |  any key: back[/dim]"
-    )
-
+    # ── 헤더 ──────────────────────────────────────────────────────────────────
     _HEADER_TEXT = (
         "[bold cyan]LangRepeater[/bold cyan]\n"
         "Audio segment repeater for language learning"
     )
 
+    # ── 모드 선택 줄 ──────────────────────────────────────────────────────────
+    _MODE_LINE_L = (
+        "[dim]1: Review [/dim]  |  "
+        "[dim]2: Listen & Repeat [/dim]  |  "
+        "[bold yellow]3: Listening [/bold yellow]"
+    )
+    _MODE_LINE_R = (
+        "[bold green]1: Review [/bold green]  |  "
+        "[dim]2: Listen & Repeat [/dim]  |  "
+        "[dim]3: Listening [/dim]"
+    )
+    _MODE_LINE_LR = (
+        "[dim]1: Review [/dim]  |  "
+        "[bold white]2: Listen & Repeat [/bold white]  |  "
+        "[dim]3: Listening [/dim]"
+    )
+
+    # ── 도움말 텍스트 ─────────────────────────────────────────────────────────
+    _HELP_TEXT_L = (
+        "[dim]Space: play/pause      |  A/←/↑: prev         |  D/→/↓: next   |  [ ]: prev/next 3 [/dim]\n"
+        "[dim]V: show/hide subtitle  |  G: goto             |  Q: quit       |  ESC: home        [/dim]\n"
+        "[dim]                       |                      |                |                   [/dim]\n"
+        "[dim]                       |                      |                |                   [/dim]\n"
+        "[dim]                       |                      |                |                   [/dim]"
+    )
+    _HELP_TEXT_LR = (
+        "[dim]Space: play/pause      |  A/←/↑: prev         |  D/→/↓: next   |  [ ]: prev/next 3 [/dim]\n"
+        "[dim]V: show/hide subtitle  |  G: goto             |  Q: quit       |  ESC: home        [/dim]\n"
+        "[dim]S: replay              |  [/dim][white]T: transcribe[/white][dim]       |  U: merge      |  I: split         [/dim]\n"
+        "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s  |  .: end +0.1s     [/dim]\n"
+        "[dim]P: segment stats       |  0: date stats       |  B: bookmark   |  -: bookmark list [/dim]"
+    )
+    _HELP_TEXT_R = (
+        "[dim]Space: play/pause      |  A/←/↑: prev         |  D/→/↓: next   |  [ ]: prev/next 3 [/dim]\n"
+        "[dim]V: show/hide subtitle  |  [/dim][white]R: resample[/white][dim]         |  Q: quit       |  ESC: home        [/dim]\n"
+        "[dim]S: replay              |  T: transcribe       |                |                   [/dim]\n"
+        "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s  |  .: end +0.1s     [/dim]\n"
+        "[dim]P: segment stats       |  0: date stats       |  B: bookmark   |                   [/dim]"
+    )
+    _HELP_TEXT_STATS = "[dim][ ]: prev/next page  |  any key: back[/dim]"
+
+    # ── 메뉴 힌트 ─────────────────────────────────────────────────────────────
+    _HINT_MENU     = "[dim]↑/↓: move  |  Enter: select  |  ESC: back[/dim]"
+    _HINT_HOME     = "[dim]↑/↓: move  |  Enter: select  |  Q: quit[/dim]"
+    _HINT_BOOKMARK = "[dim]↑/↓: move  |  Enter: go  |  [ ]: prev/next page  |  any key: back[/dim]"
+
+    # ── 통계 화면 컬럼 헤더 ───────────────────────────────────────────────────
+    _STATS_SEG_HEADER  = "[bold white]     # repeats  sentence[/bold white]"
+    _STATS_DATE_HEADER = "[bold white]               segments  repeats   net play time[/bold white]"
+
+    # ── 받아쓰기 힌트 / 범례 ──────────────────────────────────────────────────
+    _TRANSCRIBE_HINT = (
+        "Transcribe [Tab: play | Opt+V: show/hide subtitle | ESC/Enter: return]"
+    )
+    _TRANSCRIBE_HINT_RESULT = (
+        "Transcribe [Tab/Space: play | V/Opt+V: show/hide subtitle | ESC/Enter: return]"
+    )
+    _TRANSCRIBE_LEGEND = (
+        "      \033[1;32m█\033[0m\033[2m correct  "
+        "\033[0m\033[1;33m█\033[0m\033[2m case/punct  "
+        "\033[0m\033[1;31m█\033[0m\033[2m wrong\033[0m"
+    )
+
+    # ── 기타 ──────────────────────────────────────────────────────────────────
     _VISIBLE_PUNCT = frozenset(".,;:?!-'")
+
+    # ─────────────────────────────────────────────────────────────────────────
 
     def clear(self) -> None:
         console.clear()
@@ -54,25 +100,13 @@ class RichUI:
     def show_study_header(self, mode: str = "LR") -> None:
         """Study screen header: program name + description + mode + key bindings."""
         if mode == "L":
-            mode_line = (
-                "[dim]1: Review [/dim]  |  "
-                "[dim]2: Listen & Repeat [/dim]  |  "
-                "[bold yellow]3: Listening [/bold yellow]"
-            )
+            mode_line = self._MODE_LINE_L
             help_text = self._HELP_TEXT_L
         elif mode == "R":
-            mode_line = (
-                "[bold green]1: Review [/bold green]  |  "
-                "[dim]2: Listen & Repeat [/dim]  |  "
-                "[dim]3: Listening [/dim]"
-            )
+            mode_line = self._MODE_LINE_R
             help_text = self._HELP_TEXT_R
         else:
-            mode_line = (
-                "[dim]1: Review [/dim]  |  "
-                "[bold white]2: Listen & Repeat [/bold white]  |  "
-                "[dim]3: Listening [/dim]"
-            )
+            mode_line = self._MODE_LINE_LR
             help_text = self._HELP_TEXT_LR
         border_style = "yellow" if mode == "L" else "green" if mode == "R" else ""
         console.print(Panel(
@@ -89,10 +123,12 @@ class RichUI:
         draw_fn,
         selected: int = 0,
         allow_quit: bool = False,
-        hint: str = "[dim]↑/↓: move  |  Enter: select  |  ESC: back[/dim]",
+        hint: str = "",
     ) -> int | None:
         """화살표키 인터랙티브 메뉴. 선택 시 index(0-based), 취소 시 None, Q 종료 시 -1 반환.
         dim_items: 비선택 시 표시할 별도 문자열 목록. None이면 items를 [dim]으로 감싸서 표시."""
+        _hint = hint if hint else self._HINT_MENU
+
         def _render(sel: int) -> None:
             draw_fn()
             console.print()
@@ -102,8 +138,8 @@ class RichUI:
                 else:
                     dim_item = dim_items[i] if dim_items else f"[dim]{item}[/dim]"
                     console.print(f"    {dim_item}")
-            if hint:
-                console.print(f"\n{hint}")
+            if _hint:
+                console.print(f"\n{_hint}")
 
         selected = max(0, min(len(items) - 1, selected))
         _render(selected)
@@ -229,8 +265,7 @@ class RichUI:
             console.print(Panel(self._HEADER_TEXT, expand=False))
 
         result = self._run_menu(
-            items, draw_fn=_header, allow_quit=True,
-            hint="[dim]↑/↓: move  |  Enter: select  |  Q: quit[/dim]",
+            items, draw_fn=_header, allow_quit=True, hint=self._HINT_HOME,
         )
         if result is None or result == -1:
             return "quit"
@@ -254,8 +289,7 @@ class RichUI:
                 filled = 0
             empty = bar_width - filled
             color = "green" if bright else "dim green"
-            empty_style = "dim" if bright else "dim"
-            return f"[{color}]{'█' * filled}[/{color}][{empty_style}]{'░' * empty}[/{empty_style}]"
+            return f"[{color}]{'█' * filled}[/{color}][dim]{'░' * empty}[/dim]"
 
         def _line(s: Session, bright: bool) -> str:
             name = _stem(s.media_path)
@@ -296,7 +330,6 @@ class RichUI:
     @staticmethod
     def _open_file_dialog(initial_dir: str = "~") -> str | None:
         """Open native macOS file picker dialog for mp3/mp4 files via osascript."""
-        import os
         import subprocess
 
         abs_dir = os.path.abspath(os.path.expanduser(initial_dir))
@@ -340,7 +373,6 @@ class RichUI:
     def ask_split_point(self, subtitle, fd: int) -> int | None:
         """Show split point candidates. Returns char position or None to cancel."""
         import json
-        import os
         import re
         text = subtitle.text
 
@@ -486,10 +518,10 @@ class RichUI:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
     def ask_goto_number(self, total: int) -> int | None:
-        """번호로 이동: 1~total 범위의 순번을 입력받아 반환. 취소 시 None."""
+        """번호로 이동: 1~total 범위의 순번을 입력받아 반환. ESC/빈 입력 시 None."""
         while True:
-            raw = console.input(f"Go to number (1-{total}, or C to cancel): ").strip()
-            if raw.lower() == "c":
+            raw = self.ask_path(f"Go to number (1-{total})")
+            if raw is None:
                 return None
             if raw.isdigit():
                 n = int(raw)
@@ -506,7 +538,7 @@ class RichUI:
         typed = ''.join(buf)
         if init:
             sys.stdout.write(
-                "\n\033[2mTranscribe [Tab: play | Opt+V: show/hide subtitle | ESC/Enter: return]\033[0m\n"
+                f"\n\033[2m{self._TRANSCRIBE_HINT}\033[0m\n"
                 f"> {typed}"
             )
         else:
@@ -523,72 +555,56 @@ class RichUI:
         Sequence alignment via DP so that omitted/inserted words don't cause
         all subsequent words to appear wrong.
         """
-        # Overwrite hint line above with color legend appended
-        _hint = "Transcribe [Tab/Space: play | V/Opt+V: show/hide subtitle | ESC/Enter: return]"
-        _legend = (
-            "      \033[1;32m█\033[0m\033[2m correct  "
-            "\033[0m\033[1;33m█\033[0m\033[2m case/punct  "
-            "\033[0m\033[1;31m█\033[0m\033[2m wrong\033[0m"
-        )
         sys.stdout.write(
             "\r\033[2K"           # clear current (prompt) line
             "\033[1A"             # move up to hint line
             "\r\033[2K"           # clear hint line
-            f"\033[2m{_hint}\033[0m{_legend}\n"  # reprint hint + legend
+            f"\033[2m{self._TRANSCRIBE_HINT_RESULT}\033[0m{self._TRANSCRIBE_LEGEND}\n"
         )
         sys.stdout.flush()
 
         def _norm(w: str) -> str:
             return w.lower().strip(".,;:?!")
 
-
         answer_words = answer.split()
         input_words = user_input.split()
         n, m = len(answer_words), len(input_words)
 
-        # DP: edit distance keeping track of operations
-        # dp[i][j] = min cost to align answer[:i] with input[:j]
-        # cost: match=0, substitute=1, delete(skip answer word)=1, insert(extra input word)=1
         INF = n + m + 1
         dp = [[INF] * (m + 1) for _ in range(n + 1)]
         dp[0][0] = 0
         for i in range(1, n + 1):
-            dp[i][0] = i  # delete answer words
+            dp[i][0] = i
         for j in range(1, m + 1):
-            dp[0][j] = j  # insert input words
+            dp[0][j] = j
 
         for i in range(1, n + 1):
             for j in range(1, m + 1):
                 if _norm(answer_words[i - 1]) == _norm(input_words[j - 1]):
-                    dp[i][j] = dp[i - 1][j - 1]          # match
+                    dp[i][j] = dp[i - 1][j - 1]
                 else:
                     dp[i][j] = min(
-                        dp[i - 1][j - 1] + 1,  # substitute
-                        dp[i - 1][j] + 1,       # delete (skip answer word)
-                        dp[i][j - 1] + 1,       # insert (extra input word)
+                        dp[i - 1][j - 1] + 1,
+                        dp[i - 1][j] + 1,
+                        dp[i][j - 1] + 1,
                     )
 
-        # Backtrace to get alignment
-        # Each element: (display_word, style)
         aligned: list[tuple[str, str]] = []
         i, j = n, m
         while i > 0 or j > 0:
             if i > 0 and j > 0 and _norm(answer_words[i - 1]) == _norm(input_words[j - 1]):
                 aw, uw = answer_words[i - 1], input_words[j - 1]
-                if aw == uw:
-                    style = "bold green"   # exact match
-                else:
-                    style = "bold yellow"  # correct word, wrong case/punctuation
+                style = "bold green" if aw == uw else "bold yellow"
                 aligned.append((uw, style))
                 i -= 1; j -= 1
             elif i > 0 and j > 0 and dp[i][j] == dp[i - 1][j - 1] + 1:
-                aligned.append((input_words[j - 1], "bold red"))  # substitution
+                aligned.append((input_words[j - 1], "bold red"))
                 i -= 1; j -= 1
             elif i > 0 and dp[i][j] == dp[i - 1][j] + 1:
-                aligned.append(("_" * len(answer_words[i - 1]), "bold red"))  # omitted word
+                aligned.append(("_" * len(answer_words[i - 1]), "bold red"))
                 i -= 1
             else:
-                aligned.append((input_words[j - 1], "bold red"))  # extra input word
+                aligned.append((input_words[j - 1], "bold red"))
                 j -= 1
         aligned.reverse()
 
@@ -600,7 +616,6 @@ class RichUI:
             line.append(word, style=style)
         if all_correct:
             line.append("  👍")
-
         console.print(line)
 
     def show_stats_header(self) -> None:
@@ -625,7 +640,7 @@ class RichUI:
         end = min(start + page_size, total)
         entries = ranked[start:end]
         console.print(f"\n[bold cyan]── Learning Statistics ──[/bold cyan]  [dim]Progress: {progress_pct:.1f}%[/dim]\n")
-        console.print(f"[bold white]     # repeats  sentence[/bold white]")
+        console.print(self._STATS_SEG_HEADER)
         for idx, count in entries:
             text = sub_map[idx].text if idx in sub_map else f"(subtitle {idx})"
             marker = "[yellow]▶[/yellow]" if idx == current_sub_index else " "
@@ -642,13 +657,15 @@ class RichUI:
         page: int,
         progress_pct: float = 0.0,
     ) -> None:
+        from datetime import date as _date
+
         page_size = 10
         total = len(entries)
         start = page * page_size
         end = min(start + page_size, total)
         page_entries = entries[start:end]
         console.print(f"\n[bold cyan]── Date Statistics ──[/bold cyan]  [dim]Progress: {progress_pct:.1f}%[/dim]\n")
-        # pre-compute seconds for all entries (for relative bar scaling)
+
         def _day_seconds(sc: dict[int, int]) -> float:
             return sum(
                 (sub_map[idx].end - sub_map[idx].start) * count
@@ -658,10 +675,9 @@ class RichUI:
 
         all_seconds = [_day_seconds(sc) for _, sc in entries]
         max_seconds = max(all_seconds) if all_seconds else 1.0
-
-        from datetime import date as _date
         today_str = _date.today().strftime("%Y-%m-%d")
-        console.print(f"[bold white]               segments  repeats   net play time[/bold white]")
+
+        console.print(self._STATS_DATE_HEADER)
         for date_str, sc in page_entries:
             subtitle_count = len(sc)
             repeat_count = sum(sc.values())
@@ -692,16 +708,17 @@ class RichUI:
         page_count = max(1, -(-total // page_size))
 
         console.print(Panel(
-            self._HEADER_TEXT + "\n\n"
-            "[dim]↑/↓: move cursor  |  [/dim][dim]][: next page  |  [: prev page  |  Enter: go  |  any key: back[/dim]",
+            self._HEADER_TEXT + "\n\n" + self._HINT_BOOKMARK,
             expand=False,
         ))
         console.print(f"\n[bold cyan]── Bookmarks ──[/bold cyan]  [dim]({total} total)[/dim]\n")
         for i, sub_idx in enumerate(entries):
             abs_pos = start + i
-            arrow = "[bold yellow]→[/bold yellow] " if abs_pos == cursor else "  "
             text = sub_map[sub_idx].text if sub_idx in sub_map else f"(subtitle {sub_idx})"
-            console.print(f"{arrow}[dim white]{sub_idx:>4}[/dim white]  [white]{text}[/white]")
+            if abs_pos == cursor:
+                console.print(f"  [bold magenta]▶︎[/bold magenta] [bold white]{sub_idx:>4}[/bold white]  [bold white]{text}[/bold white]")
+            else:
+                console.print(f"    [dim]{sub_idx:>4}  {text}[/dim]")
         console.print(f"\n[dim]Page {page + 1}/{page_count}[/dim]")
 
     def show_stats(self, total_play: int, subtitle_index: int, subtitle_play: int) -> None:

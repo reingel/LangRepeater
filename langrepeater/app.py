@@ -442,7 +442,8 @@ class AppController:
                 elif action == Action.BOOKMARK:
                     self._handle_bookmark_toggle()
                 elif action == Action.BOOKMARK_LIST:
-                    self._handle_bookmark_list()
+                    if self._mode != "R":
+                        self._handle_bookmark_list()
                 elif action == Action.PRINT_STATS:
                     self._handle_print_stats()
                     self._showing_stats = True
