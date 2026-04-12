@@ -51,7 +51,7 @@ class RichUI:
     ]
     _HELP_STUDY: list[tuple] = [
         ("Space", "play/pause", "111"),
-        ("    S", "replay",     "110"),
+        ("    S", "replay",     "111"),
         ("    V", "subtitle",   "111"),
         ("    B", "bookmark",   "110"),
         ("    T", "transcribe", "110"),
