@@ -378,8 +378,15 @@ class RichUI:
             f"\n [dim]Progress: {display_current}/{display_total} ({progress_pct:.1f}%)  {bar}[/dim]"
         )
 
-        prefix_len = 9  # 4 (index) + 5 (bm_marker)
+        prefix_len = 12  # 2(before) + 4(index) + 1(after) + 5(bm_marker)
         indent = " " * prefix_len
+
+        def _cut_markers(text: str) -> tuple[str, str]:
+            """문장 앞/뒤 잘림 여부로 마커 반환. before(2자) + after(1자)."""
+            t = text.strip()
+            before = "~" if t and t[0].islower() else " "
+            after  = "~" if t and t[-1] not in ".!?" else " "
+            return before, after
 
         def _wrap(text: str, first_width: int, rest_width: int) -> list[str]:
             """단어 단위로 줄바꿈. 첫 줄은 first_width, 이후 줄은 rest_width."""
@@ -412,13 +419,15 @@ class RichUI:
             sub = subtitles[idx]
             display_text = self._mask_text(sub.text) if masked else sub.text
             bm_marker = "  *  " if (bookmarks and sub.index in bookmarks) else "     "
+            before, after = _cut_markers(sub.text)
+            num_str = f"{before + str(sub.index) + after:>6}"  # 7자 고정
             if idx == current_index:
                 ts = f"  [{sub.start:.2f}s ~ {sub.end:.2f}s]"
                 avail = line_width - prefix_len
                 chunks = _wrap(display_text, max(avail, 1), max(avail, 1))
                 # 첫 번째 줄: 텍스트를 avail 폭으로 패딩 후 타임스탬프를 고정 위치에 표시
                 line = Text()
-                line.append(f"{sub.index:>4}", style="bold cyan")
+                line.append(num_str, style="bold cyan")
                 line.append(bm_marker, style="bold yellow")
                 line.append(f"{chunks[0]:<{avail}}", style="bold white")
                 line.append(ts, style="dim bold cyan")
@@ -433,7 +442,7 @@ class RichUI:
                 avail = line_width - prefix_len
                 chunks = _wrap(display_text, max(avail, 1), max(avail, 1))
                 bm_str = f"[dim bold yellow]{bm_marker}[/dim bold yellow]" if (bookmarks and sub.index in bookmarks) else bm_marker
-                console.print(f"[dim cyan]{sub.index:>4}[/dim cyan]{bm_str}[dim white]{chunks[0]}[/dim white]")
+                console.print(f"[dim cyan]{num_str}[/dim cyan]{bm_str}[dim white]{chunks[0]}[/dim white]")
                 for chunk in chunks[1:]:
                     console.print(f"[dim white]{indent}{chunk}[/dim white]")
 
