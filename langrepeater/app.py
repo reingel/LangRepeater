@@ -391,10 +391,14 @@ class AppController:
                         self._was_playing = False
                         self._play_duration = 0.0
                         self._mode = "R"
-                        # 이전 샘플링 상태가 있으면 복원
                         if self._review_list:
+                            # 이전 샘플링 상태가 있으면 복원
                             self.current_index = self._review_list[self._review_index]
-                        self._refresh_display()
+                            self._refresh_display()
+                        else:
+                            # 샘플링이 없으면 자동 resample
+                            self._refresh_display()
+                            self._handle_review()
                 elif action == Action.BACK:
                     self._handle_back()
                 elif action == Action.REVIEW:
