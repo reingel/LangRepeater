@@ -49,13 +49,13 @@ class RichUI:
     _HELP_TEXT_LR = (
         "[dim]Space: play/pause      |  A/K/←/↑: prev       |  D/J/→/↓: next   |  [ ]: prev/next 3 [/dim]\n"
         "[dim]V: show/hide subtitle  |  G: goto             |  Q: quit         |  ESC: home        [/dim]\n"
-        "[dim]S: replay              |  [/dim][white]T: transcribe[/white][dim]         |  U: merge      |  I: split         [/dim]\n"
+        "[dim]S: replay              |  [/dim][white]T: transcribe[/white][dim]       |  U: merge        |  I: split         [/dim]\n"
         "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s    |  .: end +0.1s     [/dim]\n"
         "[dim]P: segment stats       |  0: date stats       |  B: bookmark     |  -: bookmark list [/dim]"
     )
     _HELP_TEXT_R = (
         "[dim]Space: play/pause      |  A/K/←/↑: prev       |  D/J/→/↓: next   |  [ ]: prev/next 3 [/dim]\n"
-        "[dim]V: show/hide subtitle  |  [/dim][white]R: resample[/white][dim]           |  Q: quit       |  ESC: home        [/dim]\n"
+        "[dim]V: show/hide subtitle  |  [/dim][white]R: resample[/white][dim]         |  Q: quit         |  ESC: home        [/dim]\n"
         "[dim]S: replay              |  T: transcribe       |                  |                   [/dim]\n"
         "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s    |  .: end +0.1s     [/dim]\n"
         "[dim]P: segment stats       |  0: date stats       |  B: bookmark     |                   [/dim]"
@@ -134,10 +134,10 @@ class RichUI:
             console.print()
             for i, item in enumerate(items):
                 if i == sel:
-                    console.print(f"  [bold magenta]▶︎[/bold magenta] {item}")
+                    console.print(f"  [bold magenta]▶︎[/bold magenta]  {item}")
                 else:
                     dim_item = dim_items[i] if dim_items else f"[dim]{item}[/dim]"
-                    console.print(f"    {dim_item}")
+                    console.print(f"     {dim_item}")
             if _hint:
                 console.print(f"\n{_hint}")
 
@@ -293,7 +293,9 @@ class RichUI:
 
         def _line(s: Session, bright: bool) -> str:
             name = _stem(s.media_path)
-            return f"{name:<40}  {_bar(s, bright)}"
+            if bright:
+                return f"{name:<40}  {_bar(s, bright)}"
+            return f"[dim]{name:<40}[/dim]  {_bar(s, bright)}"
 
         items     = [_line(s, bright=True)  for s in sessions]
         dim_items = [_line(s, bright=False) for s in sessions]
