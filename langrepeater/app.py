@@ -422,6 +422,8 @@ class AppController:
                     self._handle_l_page(-1)
                 elif action == Action.GOTO and self._mode == "L":
                     self._handle_goto()
+                elif action == Action.RESTART and self._mode == "L":
+                    self._handle_restart()
                 elif self._mode == "L":
                     pass  # L모드에서는 위 키 외 다른 키 무시
                 elif action == Action.GOTO and self._mode != "R":
@@ -488,9 +490,12 @@ class AppController:
                 self._play_current()
 
     def _handle_restart(self) -> None:
-        # S: always restart segment from beginning (LR mode only)
+        # S: restart segment from beginning
         self._refresh_display()
-        self._play_current()
+        if self._mode == "L":
+            self._start_l_mode_playback()
+        else:
+            self._play_current()
 
     def _handle_next(self) -> None:
         self._save_back()
