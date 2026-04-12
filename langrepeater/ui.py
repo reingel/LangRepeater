@@ -41,13 +41,13 @@ class RichUI:
     # ── 도움말 컬럼 (각 항목: (key, desc) 또는 (key, desc, "RLrL") ────────────
     # mode_flags 세 자리: R=0, LR=1, L=2 / "1"=활성, "0"=비활성(빈칸)
     _HELP_NAV: list[tuple] = [
-        (" A/K/←/↑", "prev"),
-        (" D/J/→/↓", "next"),
-        ("   [ / ]", "page"),
-        ("       G", "goto"),
-        ("      BS", "back"),
-        ("     ESC", "home"),
-        ("       Q", "quit"),
+        ("A/K/←/↑", "prev"),
+        ("D/J/→/↓", "next"),
+        ("  [ / ]", "page"),
+        ("      G", "goto"),
+        ("     BS", "back"),
+        ("    ESC", "home"),
+        ("      Q", "quit"),
     ]
     _HELP_STUDY: list[tuple] = [
         ("Space", "play/pause", "111"),
@@ -121,7 +121,7 @@ class RichUI:
             ("Navigate", RichUI._HELP_NAV),
             ("Study",    RichUI._HELP_STUDY),
             ("Subtitle", RichUI._HELP_SUBTITLE),
-            ("Etc",      RichUI._HELP_ETC),
+            ("Info",     RichUI._HELP_ETC),
         ]
 
         # 모드 무관 고정 컬럼 폭 계산
@@ -129,7 +129,7 @@ class RichUI:
         for col_name, items in col_defs:
             w = len(col_name) + 2  # " Title " 최소 폭
             for item in items:
-                w = max(w, len(f"{item[0]}: {item[1]}"))
+                w = max(w, len(f"{item[0]} : {item[1]}"))
             col_widths.append(w)
 
         # 터미널 폭에 맞게 초과분을 마지막 컬럼부터 균등 축소
@@ -161,7 +161,7 @@ class RichUI:
                 if row_idx < len(items):
                     item = items[row_idx]
                     flags = item[2] if len(item) > 2 else "111"
-                    text = f"{item[0]}: {item[1]}" if flags[idx] == "1" else ""
+                    text = f"{item[0]} : {item[1]}" if flags[idx] == "1" else ""
                 else:
                     text = ""
                 cells.append(f"{text[:w]:<{w}}")
