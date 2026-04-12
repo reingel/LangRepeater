@@ -64,8 +64,8 @@ class RichUI:
         ("    I", "split",       "010"),
     ]
     _HELP_ETC: list[tuple] = [
-        ("8", "date stats",    "110"),
-        ("9", "segment stats", "110"),
+        ("P", "segment stats", "110"),
+        ("9", "date stats",    "110"),
         ("0", "bookmark list", "010"),
     ]
 

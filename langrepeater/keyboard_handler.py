@@ -57,8 +57,8 @@ _CHAR_MAP: dict[str, Action] = {
     "1": Action.MODE_REVIEW,
     "2": Action.MODE_LISTEN_REPEAT,
     "3": Action.MODE_LISTENING,
-    "8": Action.PRINT_DATE_STATS,
-    "9": Action.PRINT_STATS,
+    "p": Action.PRINT_STATS,
+    "9": Action.PRINT_DATE_STATS,
     "0": Action.BOOKMARK_LIST,
 }
 
