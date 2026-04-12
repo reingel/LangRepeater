@@ -88,7 +88,7 @@ LangRepeater
 
 ### Review mode (key: `1`)
 
-Samples ~10 previously studied segments weighted by play count and lets you review them in Listen & Repeat style. Press `R` to resample. Progress shows `xx/10`. Play counts are recorded.
+Samples ~10 previously studied segments weighted by play count and lets you review them in Listen & Repeat style. Resampling is done automatically when entering Review mode for the first time. Press `R` to resample again. Progress shows `xx/10`. Play counts are recorded.
 
 ### Listen & Repeat mode (default, key: `2`)
 
@@ -96,7 +96,7 @@ Plays each segment one at a time. Use `Space` to play/pause, `S` to replay from 
 
 ### Listening mode (key: `3`)
 
-Plays the entire file continuously from the current segment. Subtitles update automatically as playback progresses. Play counts are **not** recorded in Listening mode.
+Plays the entire file continuously from the current segment. Subtitles update automatically as playback progresses. Press `S` to restart playback from the beginning of the current segment while keeping continuous playback. Play counts are **not** recorded in Listening mode.
 
 ---
 
@@ -126,7 +126,7 @@ Plays the entire file continuously from the current segment. Subtitles update au
 | Key | Action |
 |---|---|
 | `Space` | Play / pause current segment |
-| `S` | Replay from start |
+| `S` | Replay from start (L mode: restarts continuous playback) |
 | `V` | Show / hide subtitle |
 | `Q` | Quit |
 | `ESC` | Home screen |
