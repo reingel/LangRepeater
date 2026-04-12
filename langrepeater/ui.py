@@ -5,7 +5,7 @@ import termios
 import tty
 from pathlib import Path
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.panel import Panel
 from rich.text import Text
 
@@ -38,28 +38,37 @@ class RichUI:
         "[dim]3: Listening [/dim]"
     )
 
-    # ── 도움말 텍스트 ─────────────────────────────────────────────────────────
-    _HELP_TEXT_L = (
-        "[dim]Space: play/pause      |  A/K/←/↑: prev       |  D/J/→/↓: next   |  [ ]: prev/next 3 [/dim]\n"
-        "[dim]V: show/hide subtitle  |  G: goto             |  Q: quit         |  ESC: home        [/dim]\n"
-        "[dim]                       |                      |                  |                   [/dim]\n"
-        "[dim]                       |                      |                  |                   [/dim]\n"
-        "[dim]                       |                      |                  |                   [/dim]"
-    )
-    _HELP_TEXT_LR = (
-        "[dim]Space: play/pause      |  A/K/←/↑: prev       |  D/J/→/↓: next   |  [ ]: prev/next 3 [/dim]\n"
-        "[dim]V: show/hide subtitle  |  G: goto             |  Q: quit         |  ESC: home        [/dim]\n"
-        "[dim]S: replay              |  [/dim][white]T: transcribe[/white][dim]       |  U: merge        |  I: split         [/dim]\n"
-        "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s    |  .: end +0.1s     [/dim]\n"
-        "[dim]P: segment stats       |  0: date stats       |  B: bookmark     |  -: bookmark list [/dim]"
-    )
-    _HELP_TEXT_R = (
-        "[dim]Space: play/pause      |  A/K/←/↑: prev       |  D/J/→/↓: next   |  [ ]: prev/next 3 [/dim]\n"
-        "[dim]V: show/hide subtitle  |  [/dim][white]R: resample[/white][dim]         |  Q: quit         |  ESC: home        [/dim]\n"
-        "[dim]S: replay              |  T: transcribe       |                  |                   [/dim]\n"
-        "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s    |  .: end +0.1s     [/dim]\n"
-        "[dim]P: segment stats       |  0: date stats       |  B: bookmark     |                   [/dim]"
-    )
+    # ── 도움말 컬럼 (각 항목: (key, desc) 또는 (key, desc, "RLrL") ────────────
+    # mode_flags 세 자리: R=0, LR=1, L=2 / "1"=활성, "0"=비활성(빈칸)
+    _HELP_NAV: list[tuple] = [
+        (" A/K/←/↑", "prev"),
+        (" D/J/→/↓", "next"),
+        ("   [ / ]", "page"),
+        ("       G", "goto"),
+        ("      BS", "back"),
+        ("     ESC", "home"),
+        ("       Q", "quit"),
+    ]
+    _HELP_STUDY: list[tuple] = [
+        ("Space", "play/pause", "111"),
+        ("    S", "replay",     "110"),
+        ("    V", "subtitle",   "111"),
+        ("    B", "bookmark",   "110"),
+        ("    T", "transcribe", "110"),
+        ("    R", "resample",   "100"),
+    ]
+    _HELP_SUBTITLE: list[tuple] = [
+        ("Z / X", "start ±0.1s", "110"),
+        (", / .", "  end ±0.1s", "110"),
+        ("    U", "merge",       "010"),
+        ("    I", "split",       "010"),
+    ]
+    _HELP_ETC: list[tuple] = [
+        ("8", "date stats",    "110"),
+        ("9", "segment stats", "110"),
+        ("0", "bookmark list", "010"),
+    ]
+
     _HELP_TEXT_STATS = "[dim]↑/↓: move  |  Enter: go  |  [ ]: prev/next page  |  any key: back[/dim]"
 
     # ── 메뉴 힌트 ─────────────────────────────────────────────────────────────
@@ -97,23 +106,81 @@ class RichUI:
         console.clear()
         console.print(Panel(self._HEADER_TEXT, expand=False))
 
+    @staticmethod
+    def _build_help_table(mode: str) -> Text:
+        """4개 컬럼 도움말 생성.
+        - 컬럼 폭: 모드 무관 고정 (전체 항목 중 최대 길이)
+        - 헤더:  --- Title --- (양쪽 1공백 + - 채움)
+        - 구분:  ' | '
+        - mode_flags[R=0, LR=1, L=2] "0"이면 공백으로 채움
+        """
+        _MODE_IDX = {"R": 0, "LR": 1, "L": 2}
+        idx = _MODE_IDX.get(mode, 1)
+
+        col_defs = [
+            ("Navigate", RichUI._HELP_NAV),
+            ("Study",    RichUI._HELP_STUDY),
+            ("Subtitle", RichUI._HELP_SUBTITLE),
+            ("Etc",      RichUI._HELP_ETC),
+        ]
+
+        # 모드 무관 고정 컬럼 폭 계산
+        col_widths = []
+        for col_name, items in col_defs:
+            w = len(col_name) + 2  # " Title " 최소 폭
+            for item in items:
+                w = max(w, len(f"{item[0]}: {item[1]}"))
+            col_widths.append(w)
+
+        # 터미널 폭에 맞게 초과분을 마지막 컬럼부터 균등 축소
+        sep_total = 3 * (len(col_defs) - 1)  # " | " × 3
+        avail = console.width - 4 - sep_total  # border 2 + padding 2
+        total = sum(col_widths)
+        if total > avail and avail > 0:
+            excess = total - avail
+            for i in range(len(col_widths) - 1, -1, -1):
+                cut = min(excess, col_widths[i] - (len(col_defs[i][0]) + 2))
+                col_widths[i] -= cut
+                excess -= cut
+                if excess <= 0:
+                    break
+
+        # 헤더 행: "--- Title ---" (폭에 맞게 - 채움)
+        header_parts = []
+        for (col_name, _), w in zip(col_defs, col_widths):
+            title = f" {col_name} "
+            dashes = w - len(title)
+            header_parts.append("-" * (dashes // 2) + "[bold cyan]" + title + "[/bold cyan]" + "-" * (dashes - dashes // 2))
+        rows = ["[dim]" + " | ".join(header_parts) + "[/dim]"]
+
+        # 데이터 행
+        max_rows = max(len(items) for _, items in col_defs)
+        for row_idx in range(max_rows):
+            cells = []
+            for (_, items), w in zip(col_defs, col_widths):
+                if row_idx < len(items):
+                    item = items[row_idx]
+                    flags = item[2] if len(item) > 2 else "111"
+                    text = f"{item[0]}: {item[1]}" if flags[idx] == "1" else ""
+                else:
+                    text = ""
+                cells.append(f"{text[:w]:<{w}}")
+            rows.append("[dim]" + " | ".join(cells) + "[/dim]")
+
+        return Text.from_markup("\n".join(rows))
+
     def show_study_header(self, mode: str = "LR") -> None:
         """Study screen header: program name + description + mode + key bindings."""
         if mode == "L":
             mode_line = self._MODE_LINE_L
-            help_text = self._HELP_TEXT_L
         elif mode == "R":
             mode_line = self._MODE_LINE_R
-            help_text = self._HELP_TEXT_R
         else:
             mode_line = self._MODE_LINE_LR
-            help_text = self._HELP_TEXT_LR
         border_style = "yellow" if mode == "L" else "green" if mode == "R" else ""
-        console.print(Panel(
-            self._HEADER_TEXT + "\n\n" + mode_line + "\n\n" + help_text,
-            expand=False,
-            border_style=border_style,
-        ))
+        header = Text.from_markup(self._HEADER_TEXT + "\n\n" + mode_line)
+        content = Group(header, Text(""), self._build_help_table(mode))
+        console.print(Panel(content, expand=False, border_style=border_style))
 
     def _run_menu(
         self,
