@@ -40,25 +40,25 @@ class RichUI:
 
     # ── 도움말 텍스트 ─────────────────────────────────────────────────────────
     _HELP_TEXT_L = (
-        "[dim]Space: play/pause      |  A/←/↑: prev         |  D/→/↓: next   |  [ ]: prev/next 3 [/dim]\n"
-        "[dim]V: show/hide subtitle  |  G: goto             |  Q: quit       |  ESC: home        [/dim]\n"
-        "[dim]                       |                      |                |                   [/dim]\n"
-        "[dim]                       |                      |                |                   [/dim]\n"
-        "[dim]                       |                      |                |                   [/dim]"
+        "[dim]Space: play/pause      |  A/K/←/↑: prev       |  D/J/→/↓: next   |  [ ]: prev/next 3 [/dim]\n"
+        "[dim]V: show/hide subtitle  |  G: goto             |  Q: quit         |  ESC: home        [/dim]\n"
+        "[dim]                       |                      |                  |                   [/dim]\n"
+        "[dim]                       |                      |                  |                   [/dim]\n"
+        "[dim]                       |                      |                  |                   [/dim]"
     )
     _HELP_TEXT_LR = (
-        "[dim]Space: play/pause      |  A/←/↑: prev         |  D/→/↓: next   |  [ ]: prev/next 3 [/dim]\n"
-        "[dim]V: show/hide subtitle  |  G: goto             |  Q: quit       |  ESC: home        [/dim]\n"
-        "[dim]S: replay              |  [/dim][white]T: transcribe[/white][dim]       |  U: merge      |  I: split         [/dim]\n"
-        "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s  |  .: end +0.1s     [/dim]\n"
-        "[dim]P: segment stats       |  0: date stats       |  B: bookmark   |  -: bookmark list [/dim]"
+        "[dim]Space: play/pause      |  A/K/←/↑: prev       |  D/J/→/↓: next   |  [ ]: prev/next 3 [/dim]\n"
+        "[dim]V: show/hide subtitle  |  G: goto             |  Q: quit         |  ESC: home        [/dim]\n"
+        "[dim]S: replay              |  [/dim][white]T: transcribe[/white][dim]         |  U: merge      |  I: split         [/dim]\n"
+        "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s    |  .: end +0.1s     [/dim]\n"
+        "[dim]P: segment stats       |  0: date stats       |  B: bookmark     |  -: bookmark list [/dim]"
     )
     _HELP_TEXT_R = (
-        "[dim]Space: play/pause      |  A/←/↑: prev         |  D/→/↓: next   |  [ ]: prev/next 3 [/dim]\n"
-        "[dim]V: show/hide subtitle  |  [/dim][white]R: resample[/white][dim]         |  Q: quit       |  ESC: home        [/dim]\n"
-        "[dim]S: replay              |  T: transcribe       |                |                   [/dim]\n"
-        "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s  |  .: end +0.1s     [/dim]\n"
-        "[dim]P: segment stats       |  0: date stats       |  B: bookmark   |                   [/dim]"
+        "[dim]Space: play/pause      |  A/K/←/↑: prev       |  D/J/→/↓: next   |  [ ]: prev/next 3 [/dim]\n"
+        "[dim]V: show/hide subtitle  |  [/dim][white]R: resample[/white][dim]           |  Q: quit       |  ESC: home        [/dim]\n"
+        "[dim]S: replay              |  T: transcribe       |                  |                   [/dim]\n"
+        "[dim]Z: start -0.1s         |  X: start +0.1s      |  ,: end -0.1s    |  .: end +0.1s     [/dim]\n"
+        "[dim]P: segment stats       |  0: date stats       |  B: bookmark     |                   [/dim]"
     )
     _HELP_TEXT_STATS = "[dim]↑/↓: move  |  Enter: go  |  [ ]: prev/next page  |  any key: back[/dim]"
 
