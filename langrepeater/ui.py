@@ -244,12 +244,78 @@ class RichUI:
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
     def show_file_list(self, files: list[str], prompt: str) -> int | None:
+        PAGE_SIZE = 10
+
         def _header():
             self.show_welcome()
             console.print(f"\n[bold]{prompt}[/bold]")
 
-        items = [Path(f).name for f in files]
-        return self._run_menu(items, draw_fn=_header)
+        if len(files) <= PAGE_SIZE:
+            items = [Path(f).name for f in files]
+            return self._run_menu(items, draw_fn=_header)
+
+        # 페이지네이션 모드
+        total_pages = (len(files) + PAGE_SIZE - 1) // PAGE_SIZE
+        page = 0
+        sel = 0
+
+        def _render(p: int, s: int) -> None:
+            start = p * PAGE_SIZE
+            page_files = files[start:start + PAGE_SIZE]
+            _header()
+            console.print()
+            for i, name in enumerate(Path(f).name for f in page_files):
+                if i == s:
+                    console.print(f"  [bold magenta]▶︎[/bold magenta]  {name}")
+                else:
+                    console.print(f"     [dim]{name}[/dim]")
+            console.print(
+                f"\n[dim]↑/↓: move  |  [ ]: prev/next page  |  Enter: select  |  ESC: back"
+                f"   Page {p + 1}/{total_pages}[/dim]"
+            )
+
+        _render(page, sel)
+
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            while True:
+                rlist, _, _ = _select.select([fd], [], [], 1.0)
+                if not rlist:
+                    continue
+                ch = os.read(fd, 1)
+
+                if ch == b'\x1b':
+                    r2, _, _ = _select.select([fd], [], [], 0.05)
+                    if not r2:
+                        return None  # bare ESC
+                    ch2 = os.read(fd, 1)
+                    if ch2 == b'[':
+                        r3, _, _ = _select.select([fd], [], [], 0.05)
+                        if r3:
+                            ch3 = os.read(fd, 1)
+                            page_size = min(PAGE_SIZE, len(files) - page * PAGE_SIZE)
+                            if ch3 == b'A':    # ↑
+                                sel = max(0, sel - 1)
+                                _render(page, sel)
+                            elif ch3 == b'B':  # ↓
+                                sel = min(page_size - 1, sel + 1)
+                                _render(page, sel)
+                elif ch in (b'\r', b'\n'):
+                    return page * PAGE_SIZE + sel
+                elif ch == b']':
+                    if page < total_pages - 1:
+                        page += 1
+                        sel = 0
+                    _render(page, sel)
+                elif ch == b'[':
+                    if page > 0:
+                        page -= 1
+                        sel = 0
+                    _render(page, sel)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
     @staticmethod
     def _mask_word(word: str) -> str:
