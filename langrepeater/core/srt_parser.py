@@ -230,7 +230,7 @@ class SRTParser:
         json_path = _words_json_path(srt_path)
         if not json_path.exists():
             return []
-        with open(json_path, encoding="utf-8") as f:
+        with open(json_path, encoding="utf-8", errors="replace") as f:
             data = json.load(f)
         result: list[WordTimestamp] = []
         for seg in data.get("transcription", []):
