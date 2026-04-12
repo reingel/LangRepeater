@@ -169,6 +169,23 @@ class RichUI:
 
         return Text.from_markup("\n".join(rows))
 
+    @staticmethod
+    def _panel_outer_width() -> int:
+        """패널 외곽 폭: expand=False 패널의 실제 렌더링 폭.
+        자연 폭(콘텐츠 기반)과 터미널 폭 중 작은 값을 반환."""
+        col_defs = [
+            ("Navigate", RichUI._HELP_NAV),
+            ("Study",    RichUI._HELP_STUDY),
+            ("Subtitle", RichUI._HELP_SUBTITLE),
+            ("Info",     RichUI._HELP_ETC),
+        ]
+        sep_total = 3 * (len(col_defs) - 1)
+        natural_total = sum(
+            max(len(name) + 2, max((len(f"{i[0]} : {i[1]}") for i in items), default=0))
+            for name, items in col_defs
+        )
+        return min(natural_total + sep_total + 4, console.width)
+
     def show_study_header(self, mode: str = "LR") -> None:
         """Study screen header: program name + description + mode + key bindings."""
         if mode == "L":
@@ -361,22 +378,64 @@ class RichUI:
             f"\n [dim]Progress: {display_current}/{display_total} ({progress_pct:.1f}%)  {bar}[/dim]"
         )
 
+        prefix_len = 9  # 4 (index) + 5 (bm_marker)
+        indent = " " * prefix_len
+
+        def _wrap(text: str, first_width: int, rest_width: int) -> list[str]:
+            """단어 단위로 줄바꿈. 첫 줄은 first_width, 이후 줄은 rest_width."""
+            words = text.split()
+            if not words:
+                return [""]
+            lines: list[str] = []
+            current: list[str] = []
+            cur_len = 0
+            width = first_width
+            for word in words:
+                wl = len(word)
+                if not current:
+                    current.append(word)
+                    cur_len = wl
+                elif cur_len + 1 + wl <= width:
+                    current.append(word)
+                    cur_len += 1 + wl
+                else:
+                    lines.append(" ".join(current))
+                    current = [word]
+                    cur_len = wl
+                    width = rest_width
+            lines.append(" ".join(current))
+            return lines
+
+        line_width = self._panel_outer_width()
         console.print()
         for idx in indices:
             sub = subtitles[idx]
             display_text = self._mask_text(sub.text) if masked else sub.text
             bm_marker = "  *  " if (bookmarks and sub.index in bookmarks) else "     "
             if idx == current_index:
-                ts = f"[{sub.start:.2f}s ~ {sub.end:.2f}s]"
+                ts = f"  [{sub.start:.2f}s ~ {sub.end:.2f}s]"
+                avail = line_width - prefix_len
+                chunks = _wrap(display_text, max(avail, 1), max(avail, 1))
+                # 첫 번째 줄: 텍스트를 avail 폭으로 패딩 후 타임스탬프를 고정 위치에 표시
                 line = Text()
                 line.append(f"{sub.index:>4}", style="bold cyan")
                 line.append(bm_marker, style="bold yellow")
-                line.append(display_text, style="bold white")
-                line.append(f"  {ts}", style="dim bold cyan")
+                line.append(f"{chunks[0]:<{avail}}", style="bold white")
+                line.append(ts, style="dim bold cyan")
                 console.print(line)
+                # 이후 줄: 타임스탬프 없이 텍스트만 표시
+                for chunk in chunks[1:]:
+                    line = Text()
+                    line.append(indent, style="")
+                    line.append(chunk, style="bold white")
+                    console.print(line)
             else:
+                avail = line_width - prefix_len
+                chunks = _wrap(display_text, max(avail, 1), max(avail, 1))
                 bm_str = f"[dim bold yellow]{bm_marker}[/dim bold yellow]" if (bookmarks and sub.index in bookmarks) else bm_marker
-                console.print(f"[dim cyan]{sub.index:>4}[/dim cyan]{bm_str}[dim white]{display_text}[/dim white]")
+                console.print(f"[dim cyan]{sub.index:>4}[/dim cyan]{bm_str}[dim white]{chunks[0]}[/dim white]")
+                for chunk in chunks[1:]:
+                    console.print(f"[dim white]{indent}{chunk}[/dim white]")
 
     def show_home_menu(self, has_sessions: bool) -> str:
         """Show home menu. Returns: 'resume'|'new'|'url'|'delete'|'quit'."""
