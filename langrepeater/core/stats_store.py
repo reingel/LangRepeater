@@ -37,7 +37,7 @@ class StatsStore:
             media_path=media_path,
             total_play_count=entry.get("total_play_count", 0),
             subtitle_play_counts={
-                int(k): v for k, v in entry.get("subtitle_play_counts", {}).items()
+                str(k): v for k, v in entry.get("subtitle_play_counts", {}).items()
             },
             progress_pct=entry.get("progress_pct", 0.0),
         )
@@ -63,62 +63,40 @@ class StatsStore:
         stats.progress_pct = (current_index + 1) / total * 100 if total > 0 else 0.0
         self.save(stats)
 
-    def increment_play(self, media_path: str, subtitle_index: int) -> None:
-        # Update segment stats
+    def increment_play(self, media_path: str, subtitle_index: str) -> None:
         stats = self.load(media_path)
         stats.total_play_count += 1
         stats.subtitle_play_counts[subtitle_index] = (
             stats.subtitle_play_counts.get(subtitle_index, 0) + 1
         )
         self.save(stats)
-        # Update date stats
         self._increment_date_play(media_path, subtitle_index)
 
-    def on_merge(self, media_path: str, cur_index: int, nxt_index: int, new_total: int) -> None:
-        """Update stats after merging two adjacent subtitles (1-based indices)."""
+    def on_merge(self, media_path: str, cur_idx: str, nxt_idx: str, result_idx: str) -> None:
+        """Update stats after merging two adjacent subtitles."""
         stats = self.load(media_path)
         counts = stats.subtitle_play_counts
-        merged = counts.get(cur_index, 0) + counts.get(nxt_index, 0)
-        new_counts: dict[int, int] = {}
-        for idx, count in counts.items():
-            if idx < cur_index:
-                new_counts[idx] = count
-            elif idx == cur_index:
-                if merged:
-                    new_counts[idx] = merged
-            elif idx == nxt_index:
-                pass  # absorbed into cur
-            else:
-                new_counts[idx - 1] = count
-        new_counts = {k: v for k, v in new_counts.items() if v > 0 and k <= new_total}
-        stats.subtitle_play_counts = new_counts
-        stats.total_play_count = sum(new_counts.values())
+        merged = counts.pop(cur_idx, 0) + counts.pop(nxt_idx, 0)
+        if merged:
+            counts[result_idx] = counts.get(result_idx, 0) + merged
+        stats.total_play_count = sum(counts.values())
         self.save(stats)
-        self._reindex_date_stats_merge(media_path, cur_index, nxt_index, new_total)
+        self._update_date_stats_merge(media_path, cur_idx, nxt_idx, result_idx)
 
-    def on_split(self, media_path: str, sub_index: int, new_total: int) -> None:
-        """Update stats after splitting a subtitle (1-based index)."""
+    def on_split(self, media_path: str, orig_idx: str, new_a: str, new_b: str) -> None:
+        """Update stats after splitting a subtitle."""
         stats = self.load(media_path)
         counts = stats.subtitle_play_counts
-        original = counts.get(sub_index, 0)
+        original = counts.pop(orig_idx, 0)
         front = (original + 1) // 2
         back = original // 2
-        new_counts: dict[int, int] = {}
-        for idx, count in counts.items():
-            if idx < sub_index:
-                new_counts[idx] = count
-            elif idx == sub_index:
-                if front:
-                    new_counts[idx] = front
-            else:
-                new_counts[idx + 1] = count
+        if front:
+            counts[new_a] = counts.get(new_a, 0) + front
         if back:
-            new_counts[sub_index + 1] = back
-        new_counts = {k: v for k, v in new_counts.items() if v > 0 and k <= new_total}
-        stats.subtitle_play_counts = new_counts
-        stats.total_play_count = sum(new_counts.values())
+            counts[new_b] = counts.get(new_b, 0) + back
+        stats.total_play_count = sum(counts.values())
         self.save(stats)
-        self._reindex_date_stats_split(media_path, sub_index, new_total)
+        self._update_date_stats_split(media_path, orig_idx, new_a, new_b)
 
     # ------------------------------------------------------------------
     # Date stats (stat-date.yaml)
@@ -136,64 +114,47 @@ class StatsStore:
     def _save_date_raw(self, data: dict) -> None:
         self._date_path.write_text(yaml.dump(data, allow_unicode=True, width=float("inf")), encoding="utf-8")
 
-    def _increment_date_play(self, media_path: str, subtitle_index: int) -> None:
+    def _increment_date_play(self, media_path: str, subtitle_index: str) -> None:
         today = date.today().isoformat()
         raw = self._load_date_raw()
         media_entry = raw.setdefault(media_path, {})
         day_entry = media_entry.setdefault(today, {"total_play_count": 0, "subtitle_play_counts": {}})
         day_entry["total_play_count"] = day_entry.get("total_play_count", 0) + 1
-        sc = day_entry.setdefault("subtitle_play_counts", {})
+        sc = {str(k): v for k, v in day_entry.get("subtitle_play_counts", {}).items()}
         sc[subtitle_index] = sc.get(subtitle_index, 0) + 1
+        day_entry["subtitle_play_counts"] = sc
         self._save_date_raw(raw)
 
-    def _reindex_date_stats_merge(self, media_path: str, cur_index: int, nxt_index: int, new_total: int) -> None:
+    def _update_date_stats_merge(self, media_path: str, cur_idx: str, nxt_idx: str, result_idx: str) -> None:
         raw = self._load_date_raw()
         media_entry = raw.get(media_path)
         if not media_entry:
             return
         for day_entry in media_entry.values():
-            sc: dict = day_entry.get("subtitle_play_counts", {})
-            merged = sc.get(cur_index, 0) + sc.get(nxt_index, 0)
-            new_sc: dict[int, int] = {}
-            for idx, count in sc.items():
-                idx = int(idx)
-                if idx < cur_index:
-                    new_sc[idx] = count
-                elif idx == cur_index:
-                    if merged:
-                        new_sc[idx] = merged
-                elif idx == nxt_index:
-                    pass
-                else:
-                    new_sc[idx - 1] = count
-            day_entry["subtitle_play_counts"] = {k: v for k, v in new_sc.items() if v > 0 and k <= new_total}
-            day_entry["total_play_count"] = sum(day_entry["subtitle_play_counts"].values())
+            sc: dict = {str(k): v for k, v in day_entry.get("subtitle_play_counts", {}).items()}
+            merged = sc.pop(cur_idx, 0) + sc.pop(nxt_idx, 0)
+            if merged:
+                sc[result_idx] = sc.get(result_idx, 0) + merged
+            day_entry["subtitle_play_counts"] = sc
+            day_entry["total_play_count"] = sum(sc.values())
         self._save_date_raw(raw)
 
-    def _reindex_date_stats_split(self, media_path: str, sub_index: int, new_total: int) -> None:
+    def _update_date_stats_split(self, media_path: str, orig_idx: str, new_a: str, new_b: str) -> None:
         raw = self._load_date_raw()
         media_entry = raw.get(media_path)
         if not media_entry:
             return
         for day_entry in media_entry.values():
-            sc: dict = day_entry.get("subtitle_play_counts", {})
-            original = sc.get(sub_index, 0)
+            sc: dict = {str(k): v for k, v in day_entry.get("subtitle_play_counts", {}).items()}
+            original = sc.pop(orig_idx, 0)
             front = (original + 1) // 2
             back = original // 2
-            new_sc: dict[int, int] = {}
-            for idx, count in sc.items():
-                idx = int(idx)
-                if idx < sub_index:
-                    new_sc[idx] = count
-                elif idx == sub_index:
-                    if front:
-                        new_sc[idx] = front
-                else:
-                    new_sc[idx + 1] = count
+            if front:
+                sc[new_a] = sc.get(new_a, 0) + front
             if back:
-                new_sc[sub_index + 1] = new_sc.get(sub_index + 1, 0) + back
-            day_entry["subtitle_play_counts"] = {k: v for k, v in new_sc.items() if v > 0 and k <= new_total}
-            day_entry["total_play_count"] = sum(day_entry["subtitle_play_counts"].values())
+                sc[new_b] = sc.get(new_b, 0) + back
+            day_entry["subtitle_play_counts"] = sc
+            day_entry["total_play_count"] = sum(sc.values())
         self._save_date_raw(raw)
 
     def _delete_date_entry(self, media_path: str) -> None:
@@ -202,12 +163,12 @@ class StatsStore:
             del raw[media_path]
             self._save_date_raw(raw)
 
-    def load_date_stats(self, media_path: str) -> list[tuple[str, dict[int, int]]]:
+    def load_date_stats(self, media_path: str) -> list[tuple[str, dict[str, int]]]:
         """Return list of (date_str, subtitle_play_counts) sorted newest first."""
         raw = self._load_date_raw()
         media_entry = raw.get(media_path, {})
         result = []
         for date_str, day_entry in media_entry.items():
-            sc = {int(k): v for k, v in day_entry.get("subtitle_play_counts", {}).items()}
+            sc = {str(k): v for k, v in day_entry.get("subtitle_play_counts", {}).items()}
             result.append((date_str, sc))
         return sorted(result, key=lambda x: x[0], reverse=True)
