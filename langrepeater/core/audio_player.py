@@ -54,22 +54,24 @@ class PygameAudioPlayer(AudioPlayer):
         self._paused: bool = False
         self._remaining: float = 0.0
         self._play_start_time: float = 0.0
+        self._paused_offset: float = 0.0  # cumulative play time before current play period
         self._on_complete: Callable | None = None
         self._start_pos: float = 0.0
 
     def play_segment(self, path: str, start: float, end: float | None = None, on_complete: Callable | None = None) -> None:
         self.stop()
         self._paused = False
+        self._paused_offset = 0.0
         self._on_complete = on_complete
         self._start_pos = start
         music = self._pygame.mixer.music
         with _suppress_stderr():
             music.load(path)
             music.play(start=start)
+        self._play_start_time = time.monotonic()
 
         if end is not None:
             self._remaining = end - start
-            self._play_start_time = time.monotonic()
             self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
             self._stop_timer.daemon = True
             self._stop_timer.start()
@@ -84,7 +86,7 @@ class PygameAudioPlayer(AudioPlayer):
     def toggle_pause(self) -> None:
         music = self._pygame.mixer.music
         if self._paused:
-            # resume: restart timer with remaining time (only if a stop timer was in use)
+            # resume: restart a fresh play period from current paused position
             music.unpause()
             self._paused = False
             self._play_start_time = time.monotonic()
@@ -93,8 +95,9 @@ class PygameAudioPlayer(AudioPlayer):
                 self._stop_timer.daemon = True
                 self._stop_timer.start()
         elif music.get_busy():
-            # pause: cancel timer, save remaining time
+            # pause: accumulate elapsed into _paused_offset, reduce remaining
             elapsed = time.monotonic() - self._play_start_time
+            self._paused_offset += elapsed
             self._remaining = max(0.0, self._remaining - elapsed)
             if self._stop_timer:
                 self._stop_timer.cancel()
@@ -106,10 +109,11 @@ class PygameAudioPlayer(AudioPlayer):
         return self._pygame.mixer.music.get_busy() and not self._paused
 
     def get_position(self) -> float:
-        pos_ms = self._pygame.mixer.music.get_pos()
-        if pos_ms < 0:
-            return self._start_pos
-        return self._start_pos + pos_ms / 1000
+        if self._paused:
+            return self._start_pos + self._paused_offset
+        if not self._pygame.mixer.music.get_busy():
+            return self._start_pos + self._paused_offset
+        return self._start_pos + self._paused_offset + (time.monotonic() - self._play_start_time)
 
     def stop(self) -> None:
         if self._stop_timer is not None:
@@ -130,64 +134,77 @@ class VLCAudioPlayer(AudioPlayer):
         self._stop_timer: threading.Timer | None = None
         self._remaining: float = 0.0
         self._play_start_time: float = 0.0
+        self._paused_offset: float = 0.0  # cumulative play time before current play period
         self._on_complete: Callable | None = None
+        self._start_pos: float = 0.0
+        self._paused: bool = False
 
     def play_segment(self, path: str, start: float, end: float | None = None, on_complete: Callable | None = None) -> None:
         self.stop()
+        self._paused = False
+        self._paused_offset = 0.0
         self._on_complete = on_complete
+        self._start_pos = start
 
         media = self._vlc.Media(path)
+        media.add_option(f":start-time={start:.3f}")  # seek on open, avoids set_time() race
         self._player.set_media(media)
         self._player.video_set_track(-1)
         self._player.play()
-        self._player.set_time(int(start * 1000))
+        self._play_start_time = time.monotonic()
 
         if end is not None:
             self._remaining = end - start
-            self._play_start_time = time.monotonic()
             self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
             self._stop_timer.daemon = True
             self._stop_timer.start()
 
     def _on_segment_end(self) -> None:
         self._player.stop()
+        self._paused = False
         self._remaining = 0.0
         if self._on_complete:
             self._on_complete()
 
     def toggle_pause(self) -> None:
         import vlc
-        if self._player.get_state() == vlc.State.Paused:
-            # resume: restart timer with remaining time (only if a stop timer was in use)
-            self._player.pause()
+        if self._paused:
+            # resume: restart a fresh play period from current paused position
+            self._player.pause()  # vlc: pause() toggles pause→play
+            self._paused = False
             self._play_start_time = time.monotonic()
             if self._remaining > 0:
                 self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
                 self._stop_timer.daemon = True
                 self._stop_timer.start()
         elif self._player.get_state() == vlc.State.Playing:
-            # pause: cancel timer, save remaining time
+            # pause: accumulate elapsed into _paused_offset, reduce remaining
             elapsed = time.monotonic() - self._play_start_time
+            self._paused_offset += elapsed
             self._remaining = max(0.0, self._remaining - elapsed)
             if self._stop_timer:
                 self._stop_timer.cancel()
                 self._stop_timer = None
             self._player.pause()
+            self._paused = True
 
     def is_playing(self) -> bool:
         import vlc
-        return self._player.get_state() == vlc.State.Playing
+        return self._player.get_state() == vlc.State.Playing and not self._paused
 
     def get_position(self) -> float:
-        t = self._player.get_time()
-        if t < 0:
-            return 0.0
-        return t / 1000
+        if self._paused:
+            return self._start_pos + self._paused_offset
+        import vlc
+        if self._player.get_state() != vlc.State.Playing:
+            return self._start_pos + self._paused_offset
+        return self._start_pos + self._paused_offset + (time.monotonic() - self._play_start_time)
 
     def stop(self) -> None:
         if self._stop_timer is not None:
             self._stop_timer.cancel()
             self._stop_timer = None
+        self._paused = False
         self._player.stop()
 
 
