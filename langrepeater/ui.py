@@ -78,7 +78,7 @@ class RichUI:
     _HINT_BOOKMARK = "[dim]↑/↓: move  |  Enter: go  |  [ ]: prev/next page  |  any key: back[/dim]"
 
     # ── 통계 화면 컬럼 헤더 ───────────────────────────────────────────────────
-    _STATS_SEG_HEADER  = "[bold white]     #     repeats  sentence[/bold white]"
+    _STATS_SEG_HEADER  = "[bold white]    #      repeats   sentence[/bold white]"
     _STATS_DATE_HEADER = "[bold white]               segments  repeats   net play time[/bold white]"
 
     # ── 받아쓰기 힌트 / 범례 ──────────────────────────────────────────────────
@@ -383,11 +383,7 @@ class RichUI:
         indent = " " * prefix_len
 
         def _cut_markers(text: str) -> tuple[str, str]:
-            """문장 앞/뒤 잘림 여부로 마커 반환. before(1자) + after(1자)."""
-            t = text.strip()
-            before = "~" if t and t[0].islower() else " "
-            after  = "~" if t and t[-1] not in ".!?" else " "
-            return before, after
+            return " ", " "
 
         def _wrap(text: str, first_width: int, rest_width: int) -> list[str]:
             """단어 단위로 줄바꿈. 첫 줄은 first_width, 이후 줄은 rest_width."""
@@ -421,7 +417,7 @@ class RichUI:
             display_text = self._mask_text(sub.text) if masked else sub.text
             bm_marker = "  *  " if (bookmarks and sub.index in bookmarks) else "     "
             before, after = _cut_markers(sub.text)
-            num_str = f"{before + str(sub.index) + after:>6}"  # 6자 고정
+            num_str = f"{before + str(sub.index) + after:<6}"  # 6자 고정
             if idx == current_index:
                 ts = f"  [{sub.start:.2f}s ~ {sub.end:.2f}s]"
                 avail = line_width - prefix_len
@@ -831,13 +827,13 @@ class RichUI:
 
     def show_learning_stats(
         self,
-        ranked: list[tuple[int, int]],
-        sub_map: dict[int, Subtitle],
+        ranked: list[tuple[str, int]],
+        sub_map: dict[str, Subtitle],
         total_seconds: float,
         page: int,
         progress_pct: float = 0.0,
-        current_sub_index: int = -1,
-        bookmarks: set[int] | None = None,
+        current_sub_index: str = "",
+        bookmarks: set[str] | None = None,
         cursor: int = -1,
     ) -> None:
         page_size = 10
@@ -856,12 +852,12 @@ class RichUI:
                 console.print(
                     "[bold]"
                     " [magenta]▶︎[/magenta] "
-                    f"[cyan]{idx:>4}[/cyan]{bm}[green]{count:>3}[/green]{play}[white]{text}[/white]"
+                    f"[cyan]{idx:<5}[/cyan]{bm}[green]{count:>3}[/green]{play}[white]{text}[/white]"
                     "[/bold]"
                 )
             else:
                 console.print(
-                    f"   [dim]{idx:>4}{bm}[green]{count:>3}[/green][/dim]{play}[dim]{text}[/dim]"
+                    f"   [dim]{idx:<5}{bm}[green]{count:>3}[/green][/dim]{play}[dim]{text}[/dim]"
                 )
         hours, rem = divmod(int(total_seconds), 3600)
         minutes, seconds = divmod(rem, 60)
@@ -870,8 +866,8 @@ class RichUI:
 
     def show_date_stats(
         self,
-        entries: list[tuple[str, dict[int, int]]],
-        sub_map: dict[int, Subtitle],
+        entries: list[tuple[str, dict[str, int]]],
+        sub_map: dict[str, Subtitle],
         page: int,
         progress_pct: float = 0.0,
     ) -> None:
@@ -884,7 +880,7 @@ class RichUI:
         page_entries = entries[start:end]
         console.print(f"\n[bold cyan]── Date Statistics ──[/bold cyan]  [dim]Progress: {progress_pct:.1f}%[/dim]\n")
 
-        def _day_seconds(sc: dict[int, int]) -> float:
+        def _day_seconds(sc: dict[str, int]) -> float:
             return sum(
                 (sub_map[idx].end - sub_map[idx].start) * count
                 for idx, count in sc.items()
@@ -912,12 +908,12 @@ class RichUI:
 
     def show_bookmark_list(
         self,
-        bookmark_indices: list[int],
-        sub_map: dict[int, Subtitle],
+        bookmark_indices: list[str],
+        sub_map: dict[str, Subtitle],
         page: int,
         cursor: int,
-        current_sub_index: int = -1,
-        play_counts: dict[int, int] | None = None,
+        current_sub_index: str = "",
+        play_counts: dict[str, int] | None = None,
     ) -> None:
         """북마크 목록 화면: 10개씩 페이지, 커서 이동 가능."""
         page_size = 10

@@ -9,7 +9,7 @@ from pathlib import Path
 from .core.audio_player import AudioPlayer, create_player
 from .core.bookmark_store import BookmarkStore
 from .core.file_finder import FileFinder
-from .core.models import Session, Subtitle
+from .core.models import Session, Subtitle, _index_key, _merged_index, _split_indices
 from .core.progress_store import ProgressStore
 from .core.stats_store import StatsStore
 from .core.srt_parser import SRTParser, _words_json_path, _words_yaml_path
@@ -790,14 +790,15 @@ class AppController:
             return  # no next segment
         cur = self.subtitles[self.current_index]
         nxt = self.subtitles[self.current_index + 1]
-        cur_index = cur.index
-        nxt_index = nxt.index
+        cur_idx = cur.index
+        nxt_idx = nxt.index
+        result_idx = _merged_index(cur_idx, nxt_idx)
+        cur.index = result_idx
         cur.end = nxt.end
         sep = "" if _is_cjk_text(cur.text.rstrip() or nxt.text.lstrip()) else " "
         cur.text = cur.text.rstrip() + sep + nxt.text.lstrip()
         self.subtitles.pop(self.current_index + 1)
-        self._reindex_subtitles()
-        self.stats_store.on_merge(self.media_path, cur_index, nxt_index, len(self.subtitles))
+        self.stats_store.on_merge(self.media_path, cur_idx, nxt_idx, result_idx)
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
         self._play_current()
@@ -825,7 +826,7 @@ class AppController:
         if not self.subtitles:
             return
         sub = self.subtitles[self.current_index]
-        sub_index = sub.index
+        orig_idx = sub.index
         split_pos = self.ui.ask_split_point(sub, self._fd)
         if split_pos is None:
             self._refresh_display()
@@ -833,12 +834,11 @@ class AppController:
         text_a = sub.text[:split_pos].rstrip()
         text_b = sub.text[split_pos:].lstrip()
         split_time = round(self._split_time_from_word_timestamps(sub, split_pos), 3)
-        from .core.models import Subtitle
-        sub_a = Subtitle(index=0, start=sub.start, end=split_time, text=text_a)
-        sub_b = Subtitle(index=0, start=split_time, end=sub.end, text=text_b)
+        idx_a, idx_b = _split_indices(orig_idx)
+        sub_a = Subtitle(index=idx_a, start=sub.start, end=split_time, text=text_a)
+        sub_b = Subtitle(index=idx_b, start=split_time, end=sub.end, text=text_b)
         self.subtitles[self.current_index:self.current_index + 1] = [sub_a, sub_b]
-        self._reindex_subtitles()
-        self.stats_store.on_split(self.media_path, sub_index, len(self.subtitles))
+        self.stats_store.on_split(self.media_path, orig_idx, idx_a, idx_b)
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
         self._play_current()
@@ -1221,7 +1221,7 @@ class AppController:
 
     def _reindex_subtitles(self) -> None:
         for i, sub in enumerate(self.subtitles):
-            sub.index = i + 1
+            sub.index = str(i + 1)
 
     def _handle_bookmark_toggle(self) -> None:
         if not self.subtitles:
@@ -1234,7 +1234,7 @@ class AppController:
     def _handle_bookmark_list(self) -> None:
         if not self.subtitles:
             return
-        bookmark_indices = sorted(self._bookmarks)
+        bookmark_indices = sorted(self._bookmarks, key=_index_key)
         if not bookmark_indices:
             self._refresh_display()
             self.ui.show_message("[dim]No bookmarks yet. Press B to add one.[/dim]")
@@ -1243,7 +1243,7 @@ class AppController:
         play_counts = self.stats_store.load(self.media_path).subtitle_play_counts
         # 커서를 현재 구간과 가장 가까운 북마크 위치로 초기화
         current_sub_index = self.subtitles[self.current_index].index
-        closest = min(range(len(bookmark_indices)), key=lambda i: abs(bookmark_indices[i] - current_sub_index))
+        closest = min(range(len(bookmark_indices)), key=lambda i: abs(_index_key(bookmark_indices[i])[0] - _index_key(current_sub_index)[0]))
         self._bookmark_cursor = closest
         self._bookmark_page = closest // 10
         self._showing_bookmarks = True
@@ -1252,7 +1252,7 @@ class AppController:
                                     current_sub_index=current_sub_index, play_counts=play_counts)
 
     def _handle_bookmark_cursor(self, direction: int) -> None:
-        bookmark_indices = sorted(self._bookmarks)
+        bookmark_indices = sorted(self._bookmarks, key=_index_key)
         if not bookmark_indices:
             return
         self._bookmark_cursor = max(0, min(len(bookmark_indices) - 1, self._bookmark_cursor + direction))
@@ -1265,7 +1265,7 @@ class AppController:
                                     play_counts=play_counts)
 
     def _handle_bookmark_page(self, direction: int) -> None:
-        bookmark_indices = sorted(self._bookmarks)
+        bookmark_indices = sorted(self._bookmarks, key=_index_key)
         if not bookmark_indices:
             return
         page_count = max(1, -(-len(bookmark_indices) // 10))
@@ -1287,7 +1287,7 @@ class AppController:
 
     def _handle_bookmark_select(self) -> None:
         """Enter: 선택한 북마크 구간으로 이동하고 LR모드로 복귀."""
-        bookmark_indices = sorted(self._bookmarks)
+        bookmark_indices = sorted(self._bookmarks, key=_index_key)
         if not bookmark_indices or self._bookmark_cursor >= len(bookmark_indices):
             self._showing_bookmarks = False
             self._refresh_display()
@@ -1352,7 +1352,7 @@ class AppController:
         self._stats_sub_map = {sub.index: sub for sub in self.subtitles}
         self._stats_ranked = sorted(
             stats.subtitle_play_counts.items(),
-            key=lambda x: x[0],  # 자막 순번 오름차순
+            key=lambda x: _index_key(x[0]),  # 자막 순번 오름차순
         )
         self._stats_total_seconds = sum(
             (self._stats_sub_map[idx].end - self._stats_sub_map[idx].start) * count
@@ -1364,7 +1364,8 @@ class AppController:
         import bisect
         current_sub_index = self.subtitles[self.current_index].index
         ranked_indices = [idx for idx, _ in self._stats_ranked]
-        pos = bisect.bisect_right(ranked_indices, current_sub_index) - 1
+        ranked_keys = [_index_key(idx) for idx in ranked_indices]
+        pos = bisect.bisect_right(ranked_keys, _index_key(current_sub_index)) - 1
         self._stats_cursor = max(0, pos)
         self._stats_page = self._stats_cursor // 10
         self.ui.clear()

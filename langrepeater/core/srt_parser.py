@@ -1,12 +1,10 @@
-import datetime
 import json
 import re
 from pathlib import Path
 
-import srt
 import yaml
 
-from .models import Subtitle, WordTimestamp
+from .models import Subtitle, WordTimestamp, _index_key
 
 _CAPITAL_LETTERS_PATH = Path(__file__).parent.parent / "capital_letters.json"
 _ABBREVIATIONS_PATH = Path(__file__).parent.parent / "abbreviations.json"
@@ -61,21 +59,78 @@ def _word_srt_path(srt_path: str) -> Path:
     return p.with_name(p.stem + "-word" + p.suffix)
 
 
+# ---------------------------------------------------------------------------
+# Custom SRT parse / format helpers (supports non-integer indexes like "45-1")
+# ---------------------------------------------------------------------------
+
+_TIME_RE = re.compile(r'(\d+):(\d+):(\d+)[,\.](\d+)')
+
+
+def _parse_time(s: str) -> float:
+    m = _TIME_RE.match(s.strip())
+    if not m:
+        return 0.0
+    h, mn, sec, ms = int(m[1]), int(m[2]), int(m[3]), int(m[4])
+    return h * 3600 + mn * 60 + sec + ms / 1000.0
+
+
+def _format_time(seconds: float) -> str:
+    ms = round(seconds * 1000)
+    h = ms // 3_600_000; ms %= 3_600_000
+    m = ms // 60_000; ms %= 60_000
+    s = ms // 1000; ms %= 1000
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+_TS_LINE_RE = re.compile(
+    r'(\d+:\d+:\d+[,\.]\d+)\s*-->\s*(\d+:\d+:\d+[,\.]\d+)'
+)
+
+
+def _parse_srt_blocks(content: str) -> list[tuple[str, float, float, str]]:
+    """Parse SRT content into (index_str, start_sec, end_sec, text) tuples.
+
+    Accepts both integer and non-integer (e.g. '45-1') index lines.
+    """
+    result: list[tuple[str, float, float, str]] = []
+    lines = content.replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    i = 0
+    while i < len(lines):
+        # skip blank lines
+        while i < len(lines) and not lines[i].strip():
+            i += 1
+        if i >= len(lines):
+            break
+        index_str = lines[i].strip()
+        i += 1
+        if i >= len(lines):
+            break
+        # timestamp line
+        m = _TS_LINE_RE.match(lines[i].strip())
+        i += 1
+        if not m:
+            continue
+        start = _parse_time(m.group(1))
+        end = _parse_time(m.group(2))
+        # content lines until blank
+        content_lines: list[str] = []
+        while i < len(lines) and lines[i].strip():
+            content_lines.append(lines[i])
+            i += 1
+        text = '\n'.join(content_lines).strip()
+        result.append((index_str, start, end, text))
+    return result
+
+
 class SRTParser:
     _MARGIN = 0.0  # seconds of padding added to each sentence boundary
 
     def save(self, path: str, subtitles: list[Subtitle]) -> None:
-        srt_subtitles = [
-            srt.Subtitle(
-                index=sub.index,
-                start=datetime.timedelta(seconds=sub.start),
-                end=datetime.timedelta(seconds=sub.end),
-                content=sub.text,
-            )
-            for sub in subtitles
-        ]
         with open(path, "w", encoding="utf-8") as f:
-            f.write(srt.compose(srt_subtitles))
+            for sub in subtitles:
+                f.write(f"{sub.index}\n")
+                f.write(f"{_format_time(sub.start)} --> {_format_time(sub.end)}\n")
+                f.write(f"{sub.text}\n\n")
 
     def load(self, path: str) -> list[Subtitle]:
         if not Path(path).exists():
@@ -96,11 +151,11 @@ class SRTParser:
         with open(path, encoding="utf-8") as f:
             content = f.read()
 
-        raw_subs = list(srt.parse(content))
+        blocks = _parse_srt_blocks(content)
 
-        if self._is_word_level(raw_subs):
+        if self._is_word_level_blocks(blocks):
             Path(path).rename(_word_srt_path(path))
-            all_wts = self._collect_words(raw_subs)
+            all_wts = self._collect_words_from_blocks(blocks)
             self.save_words_yaml(path, all_wts)
             subtitles = self.subtitles_from_words(all_wts)
             self.save(path, subtitles)
@@ -108,28 +163,35 @@ class SRTParser:
 
         # Normal sentence-level SRT
         subtitles = []
-        for sub in raw_subs:
-            start = sub.start.total_seconds()
-            end = sub.end.total_seconds()
+        for index_str, start, end, text in blocks:
             if end <= start:
                 continue
             subtitles.append(Subtitle(
-                index=sub.index,
+                index=index_str,
                 start=start,
                 end=end,
-                text=sub.content.strip(),
+                text=text,
             ))
-        return sorted(subtitles, key=lambda s: s.index)
+        return sorted(subtitles, key=lambda s: _index_key(s.index))
 
-    def _is_word_level(self, raw_subs: list) -> bool:
-        """Return True if the SRT file uses word-by-word highlighting format."""
-        if len(raw_subs) < 3:
+    def _is_word_level_blocks(self, blocks: list[tuple[str, float, float, str]]) -> bool:
+        if len(blocks) < 3:
             return False
-        tagged = sum(1 for s in raw_subs if '<font' in s.content)
-        return tagged > len(raw_subs) * 0.5
+        tagged = sum(1 for _, _, _, text in blocks if '<font' in text)
+        return tagged > len(blocks) * 0.5
 
-    def _collect_words(self, raw_subs: list) -> list[WordTimestamp]:
-        """Extract flat word list from word-level SRT (one entry per word)."""
+    def _collect_words_from_blocks(self, blocks: list[tuple[str, float, float, str]]) -> list[WordTimestamp]:
+        """Extract flat word list from word-level SRT blocks."""
+        # Reconstruct srt-like objects for compatibility with existing logic
+        class _FakeSub:
+            def __init__(self, index_str, start, end, content):
+                self.index = index_str
+                self.start_s = start
+                self.end_s = end
+                self.content = content
+
+        raw_subs = [_FakeSub(idx, s, e, t) for idx, s, e, t in blocks]
+
         word_groups: list[list] = []
         for sub in raw_subs:
             base = _strip_font_tags(sub.content)
@@ -149,21 +211,16 @@ class SRTParser:
                 if 0 <= idx < len(sentence_words):
                     all_wts.append(WordTimestamp(
                         word=sentence_words[idx],
-                        start=entry.start.total_seconds(),
-                        end=entry.end.total_seconds(),
+                        start=entry.start_s,
+                        end=entry.end_s,
                     ))
         return all_wts
 
     def subtitles_from_words(self, all_wts: list[WordTimestamp]) -> list[Subtitle]:
-        """Build sentence-level Subtitles from flat word list.
-
-        Groups words into sentences at .?! boundaries.
-        Boundaries between sentences use midpoint ± margin.
-        """
+        """Build sentence-level Subtitles from flat word list."""
         if not all_wts:
             return []
 
-        # Group words into sentences by punctuation
         sentences: list[list[WordTimestamp]] = []
         current: list[WordTimestamp] = []
         for wt in all_wts:
@@ -174,7 +231,6 @@ class SRTParser:
         if current:
             sentences.append(current)
 
-        # raw = (first_word_start, last_word_end, text, words)
         raw = [
             (s[0].start, s[-1].end, " ".join(wt.word for wt in s), s)
             for s in sentences
@@ -196,7 +252,7 @@ class SRTParser:
                 continue
 
             subtitles.append(Subtitle(
-                index=i + 1,
+                index=str(i + 1),
                 start=start,
                 end=end,
                 text=text,
@@ -205,7 +261,6 @@ class SRTParser:
         return subtitles
 
     def save_words_yaml(self, srt_path: str, all_wts: list[WordTimestamp]) -> None:
-        """Save flat word list to {stem}-words.yaml."""
         data = [
             {"start": wt.start, "word": wt.word, "end": wt.end}
             for wt in all_wts
@@ -214,7 +269,6 @@ class SRTParser:
             yaml.dump(data, f, allow_unicode=True, sort_keys=False)
 
     def load_words_yaml(self, srt_path: str) -> list[WordTimestamp]:
-        """Load flat word list from {stem}-words.yaml. Returns [] if not found."""
         yaml_path = _words_yaml_path(srt_path)
         if not yaml_path.exists():
             return []
@@ -226,7 +280,6 @@ class SRTParser:
         ]
 
     def load_words_json(self, srt_path: str) -> list[WordTimestamp]:
-        """Load flat word list from whisper-cli JSON ({stem}.mp3.json). Returns [] if not found."""
         json_path = _words_json_path(srt_path)
         if not json_path.exists():
             return []
