@@ -347,7 +347,7 @@ class RichUI:
             return text
         return words[0] + " " + " ".join(RichUI._mask_word(w) for w in words[1:-1]) + " " + words[-1]
 
-    def show_subtitles(self, subtitles: list[Subtitle], current_index: int, masked: bool = True, review_total: int | None = None, bookmarks: set[int] | None = None) -> None:
+    def show_subtitles(self, subtitles: list[Subtitle], current_index: int, masked: bool = True, review_total: int | None = None, bookmarks: set[int] | None = None, title: str = "") -> None:
         n = len(subtitles)
         # determine which 3 to display
         if n == 0:
@@ -375,8 +375,10 @@ class RichUI:
         progress_pct = display_current / display_total * 100
         filled = round(progress_pct / 100 * total_num_blocks)
         bar = "█" * filled + "░" * (total_num_blocks - filled)
+        if title:
+            console.print(f"\n [dim bold italic cyan]{title}[/dim bold italic cyan]")
         console.print(
-            f"\n [dim]Progress: {display_current}/{display_total} ({progress_pct:.1f}%)  {bar}[/dim]"
+            f" [dim]Progress: {display_current}/{display_total} ({progress_pct:.1f}%)  {bar}[/dim]"
         )
 
         prefix_len = 11  # 1(before) + 4(index) + 1(after) + 5(bm_marker)
@@ -939,11 +941,11 @@ class RichUI:
                 console.print(
                     "[bold]"
                     " [magenta]▶︎[/magenta] "
-                    f"[cyan]{sub_idx:>4}[/cyan]{bm}[green]{count:>3}[/green]{play}[white]{text}[/white]"
+                    f"[cyan]{sub_idx:<5}[/cyan]{bm}[green]{count:>3}[/green]{play}[white]{text}[/white]"
                     "[/bold]"
                 )
             else:
-                console.print(f"   [dim]{sub_idx:>4}[/dim]{bm}[dim green]{count:>3}[/dim green]{play}[dim]{text}[/dim]")
+                console.print(f"   [dim]{sub_idx:<5}{bm}[green]{count:>3}[/green][/dim]{play}[dim]{text}[/dim]")
         console.print(f"\n[dim]Page {page + 1}/{page_count}[/dim]")
 
     def show_stats(self, total_play: int, subtitle_index: int, subtitle_play: int) -> None:

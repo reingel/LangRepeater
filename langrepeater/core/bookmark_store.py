@@ -49,6 +49,23 @@ class BookmarkStore:
         data[media_path] = indices
         self._save_all(data)
 
+    def remap_indices(self, media_path: str, old_to_new: dict[str, str]) -> None:
+        """Rename bookmark index keys."""
+        if not old_to_new:
+            return
+        data = self._load_all()
+        indices = [str(x) for x in data.get(media_path, [])]
+        new_indices = [old_to_new.get(idx, idx) for idx in indices]
+        seen: set[str] = set()
+        deduped = []
+        for idx in new_indices:
+            if idx not in seen:
+                seen.add(idx)
+                deduped.append(idx)
+        deduped.sort(key=_index_key)
+        data[media_path] = deduped
+        self._save_all(data)
+
     def toggle(self, media_path: str, sub_index: str) -> bool:
         """Toggle bookmark. Returns True if added, False if removed."""
         data = self._load_all()

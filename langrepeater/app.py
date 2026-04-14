@@ -799,6 +799,15 @@ class AppController:
         cur.text = cur.text.rstrip() + sep + nxt.text.lstrip()
         self.subtitles.pop(self.current_index + 1)
         self.stats_store.on_merge(self.media_path, cur_idx, nxt_idx, result_idx)
+        # 머지 후 뒤 항목 순번을 result_idx 다음부터 순차 재지정
+        remap = self._reindex_after(self.current_index + 1, _index_key(result_idx)[0] + 1)
+        # 북마크: 흡수된 nxt 항목 → result로 이동
+        bm_remap = dict(remap)
+        if nxt_idx != result_idx:
+            bm_remap[nxt_idx] = result_idx
+        self.stats_store.remap_indices(self.media_path, remap)
+        self.bookmark_store.remap_indices(self.media_path, bm_remap)
+        self._bookmarks = self.bookmark_store.load(self.media_path)
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
         self._play_current()
@@ -839,6 +848,14 @@ class AppController:
         sub_b = Subtitle(index=idx_b, start=split_time, end=sub.end, text=text_b)
         self.subtitles[self.current_index:self.current_index + 1] = [sub_a, sub_b]
         self.stats_store.on_split(self.media_path, orig_idx, idx_a, idx_b)
+        # 스플릿 후 뒤 항목 순번을 orig_idx 다음부터 순차 재지정 (45-1, 45-2는 유지)
+        remap = self._reindex_after(self.current_index + 2, _index_key(orig_idx)[0] + 1)
+        # 북마크: 원본 항목 북마크 → 첫 번째 분리 항목으로 이동
+        bm_remap = dict(remap)
+        bm_remap[orig_idx] = idx_a
+        self.stats_store.remap_indices(self.media_path, remap)
+        self.bookmark_store.remap_indices(self.media_path, bm_remap)
+        self._bookmarks = self.bookmark_store.load(self.media_path)
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
         self._play_current()
@@ -895,8 +912,9 @@ class AppController:
             return sub_wts[idx_before].end
         return _proportional()
 
-    _RESYNC_PADDING = 3.0   # seconds of extra audio to read before/after segment
-    _RESYNC_MIN_OVERLAP = 0.5  # minimum word overlap ratio to accept whisper result
+    _RESYNC_PADDING = 3.0        # seconds of extra audio to read before/after segment
+    _RESYNC_MIN_MATCH = 0.6      # minimum match ratio for prefix/suffix anchor
+    _RESYNC_ANCHOR_WORDS = 3     # number of leading/trailing words used for anchoring
 
     def _handle_resync_timestamp(self) -> None:
         """E키: whisper-cli로 현재 구간 주변 오디오를 재분석하여 timestamp 재조정."""
@@ -996,38 +1014,50 @@ class AppController:
             self._refresh_display()
             return
 
-        # 현재 자막 텍스트의 단어를 whisper 결과에서 찾아 best match window 결정
+        # 현재 자막 텍스트의 앞부분/뒷부분을 whisper 결과에서 찾아 start/end timestamp 결정
         sub_words = sub.text.split()
         if not sub_words:
             self._refresh_display()
             return
 
-        w_words = [w[0].lower().strip(".,!?;:\"'") for w in words]
-        s_words = [w.lower().strip(".,!?;:\"'") for w in sub_words]
+        def _norm(w: str) -> str:
+            return w.lower().strip(".,!?;:\"'—-")
 
-        best_start_abs: float | None = None
-        best_end_abs: float | None = None
-        best_overlap = 0.0
+        w_norm = [_norm(w[0]) for w in words]
+        s_norm = [_norm(w) for w in sub_words]
 
-        # sliding window: 자막 단어 수 ± 50% 범위의 window를 sliding하며 최대 overlap 탐색
-        min_win = max(1, len(s_words) // 2)
-        max_win = len(s_words) + len(s_words) // 2
-        for win_size in range(min_win, min(max_win + 1, len(w_words) + 1)):
-            for i in range(len(w_words) - win_size + 1):
-                window = w_words[i:i + win_size]
-                matched = sum(1 for sw in s_words if sw in window)
-                overlap = matched / len(s_words)
-                if overlap > best_overlap:
-                    best_overlap = overlap
-                    best_start_abs = words[i][1]
-                    best_end_abs = words[i + win_size - 1][2]
+        def _find_sequence(target: list[str], from_idx: int = 0) -> tuple[int, float]:
+            """target 단어 시퀀스가 w_norm[from_idx:] 에서 가장 잘 맞는 위치를 반환."""
+            n = len(target)
+            best_i, best_score = -1, 0.0
+            for i in range(from_idx, len(w_norm) - n + 1):
+                matched = sum(1 for j, t in enumerate(target) if w_norm[i + j] == t)
+                score = matched / n
+                if score > best_score:
+                    best_score = score
+                    best_i = i
+            return best_i, best_score
 
-        if best_overlap < self._RESYNC_MIN_OVERLAP or best_start_abs is None or best_end_abs is None:
-            self.ui.show_message(
-                f"[yellow]매칭 신뢰도 낮음 ({best_overlap:.0%}) — timestamp 미변경[/yellow]"
-            )
+        n_anchor = min(self._RESYNC_ANCHOR_WORDS, len(s_norm))
+        prefix = s_norm[:n_anchor]
+        suffix = s_norm[-n_anchor:]
+
+        # 앞부분 매칭 → start time
+        start_i, start_score = _find_sequence(prefix)
+        if start_score < self._RESYNC_MIN_MATCH or start_i < 0:
+            self.ui.show_message(f"[yellow]앞부분 매칭 실패 ({start_score:.0%}) — 미변경[/yellow]")
             self._refresh_display()
             return
+
+        # 뒷부분 매칭 → end time (start_i 이후에서 탐색)
+        end_i, end_score = _find_sequence(suffix, from_idx=start_i)
+        if end_score < self._RESYNC_MIN_MATCH or end_i < 0:
+            self.ui.show_message(f"[yellow]뒷부분 매칭 실패 ({end_score:.0%}) — 미변경[/yellow]")
+            self._refresh_display()
+            return
+
+        best_start_abs = words[start_i][1]
+        best_end_abs = words[end_i + n_anchor - 1][2]
 
         # 인접 자막과 겹치지 않도록 clamp
         prev_end = self.subtitles[self.current_index - 1].end if self.current_index > 0 else 0.0
@@ -1223,6 +1253,33 @@ class AppController:
         for i, sub in enumerate(self.subtitles):
             sub.index = str(i + 1)
 
+    def _heal_stale_bookmarks(self) -> None:
+        """북마크 인덱스가 현재 자막 목록에 없으면 분리된 첫 번째 자막으로 자동 보정."""
+        sub_map = {sub.index: sub for sub in self.subtitles}
+        stale = {idx for idx in self._bookmarks if idx not in sub_map}
+        if not stale:
+            return
+        remap = {}
+        for idx in stale:
+            for sub in self.subtitles:
+                if sub.index.startswith(idx + "-"):
+                    remap[idx] = sub.index
+                    break
+        if remap:
+            self.bookmark_store.remap_indices(self.media_path, remap)
+            self._bookmarks = self.bookmark_store.load(self.media_path)
+
+    def _reindex_after(self, start_pos: int, start_num: int) -> dict[str, str]:
+        """start_pos 이후 자막을 start_num부터 순차 재지정. old→new 리맵 반환."""
+        remap: dict[str, str] = {}
+        for i in range(start_pos, len(self.subtitles)):
+            old_idx = self.subtitles[i].index
+            new_idx = str(start_num + (i - start_pos))
+            if old_idx != new_idx:
+                remap[old_idx] = new_idx
+                self.subtitles[i].index = new_idx
+        return remap
+
     def _handle_bookmark_toggle(self) -> None:
         if not self.subtitles:
             return
@@ -1234,6 +1291,7 @@ class AppController:
     def _handle_bookmark_list(self) -> None:
         if not self.subtitles:
             return
+        self._heal_stale_bookmarks()
         bookmark_indices = sorted(self._bookmarks, key=_index_key)
         if not bookmark_indices:
             self._refresh_display()
@@ -1434,11 +1492,12 @@ class AppController:
     def _refresh_display(self) -> None:
         self.ui.clear()
         self.ui.show_study_header(self._mode)
+        title = Path(self.media_path).stem if self.media_path else ""
         if self._mode == "R" and self._review_list:
             review_subs = [self.subtitles[i] for i in self._review_list]
-            self.ui.show_subtitles(review_subs, self._review_index, masked=self._subtitle_masked, review_total=len(self._review_list), bookmarks=self._bookmarks)
+            self.ui.show_subtitles(review_subs, self._review_index, masked=self._subtitle_masked, review_total=len(self._review_list), bookmarks=self._bookmarks, title=title)
         else:
-            self.ui.show_subtitles(self.subtitles, self.current_index, masked=self._subtitle_masked, bookmarks=self._bookmarks)
+            self.ui.show_subtitles(self.subtitles, self.current_index, masked=self._subtitle_masked, bookmarks=self._bookmarks, title=title)
         if self.player and self.player.is_playing() and self._play_duration > 0:
             elapsed = time.monotonic() - self._play_start_time
             progress = min(1.0, elapsed / self._play_duration)

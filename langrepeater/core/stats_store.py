@@ -157,6 +157,32 @@ class StatsStore:
             day_entry["total_play_count"] = sum(sc.values())
         self._save_date_raw(raw)
 
+    def remap_indices(self, media_path: str, old_to_new: dict[str, str]) -> None:
+        """Rename subtitle index keys in both segment and date stats."""
+        if not old_to_new:
+            return
+        stats = self.load(media_path)
+        new_counts: dict[str, int] = {}
+        for idx, count in stats.subtitle_play_counts.items():
+            new_idx = old_to_new.get(idx, idx)
+            new_counts[new_idx] = new_counts.get(new_idx, 0) + count
+        stats.subtitle_play_counts = new_counts
+        stats.total_play_count = sum(new_counts.values())
+        self.save(stats)
+        raw = self._load_date_raw()
+        media_entry = raw.get(media_path)
+        if not media_entry:
+            return
+        for day_entry in media_entry.values():
+            sc = {str(k): v for k, v in day_entry.get("subtitle_play_counts", {}).items()}
+            new_sc: dict[str, int] = {}
+            for idx, count in sc.items():
+                new_idx = old_to_new.get(idx, idx)
+                new_sc[new_idx] = new_sc.get(new_idx, 0) + count
+            day_entry["subtitle_play_counts"] = new_sc
+            day_entry["total_play_count"] = sum(new_sc.values())
+        self._save_date_raw(raw)
+
     def _delete_date_entry(self, media_path: str) -> None:
         raw = self._load_date_raw()
         if media_path in raw:
