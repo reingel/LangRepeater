@@ -61,7 +61,7 @@ _CHAR_MAP: dict[str, Action] = {
     "p": Action.PRINT_STATS,
     "9": Action.PRINT_DATE_STATS,
     "0": Action.BOOKMARK_LIST,
-    "y": Action.RESYNC_TIMESTAMP,
+    "e": Action.RESYNC_TIMESTAMP,
 }
 
 

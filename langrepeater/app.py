@@ -899,7 +899,7 @@ class AppController:
     _RESYNC_MIN_OVERLAP = 0.5  # minimum word overlap ratio to accept whisper result
 
     def _handle_resync_timestamp(self) -> None:
-        """Y키: whisper-cli로 현재 구간 주변 오디오를 재분석하여 timestamp 재조정."""
+        """E키: whisper-cli로 현재 구간 주변 오디오를 재분석하여 timestamp 재조정."""
         if not self.subtitles:
             return
         sub = self.subtitles[self.current_index]
