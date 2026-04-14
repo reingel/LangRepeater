@@ -378,11 +378,11 @@ class RichUI:
             f"\n [dim]Progress: {display_current}/{display_total} ({progress_pct:.1f}%)  {bar}[/dim]"
         )
 
-        prefix_len = 12  # 2(before) + 4(index) + 1(after) + 5(bm_marker)
+        prefix_len = 11  # 1(before) + 4(index) + 1(after) + 5(bm_marker)
         indent = " " * prefix_len
 
         def _cut_markers(text: str) -> tuple[str, str]:
-            """문장 앞/뒤 잘림 여부로 마커 반환. before(2자) + after(1자)."""
+            """문장 앞/뒤 잘림 여부로 마커 반환. before(1자) + after(1자)."""
             t = text.strip()
             before = "~" if t and t[0].islower() else " "
             after  = "~" if t and t[-1] not in ".!?" else " "
@@ -420,7 +420,7 @@ class RichUI:
             display_text = self._mask_text(sub.text) if masked else sub.text
             bm_marker = "  *  " if (bookmarks and sub.index in bookmarks) else "     "
             before, after = _cut_markers(sub.text)
-            num_str = f"{before + str(sub.index) + after:>6}"  # 7자 고정
+            num_str = f"{before + str(sub.index) + after:>6}"  # 6자 고정
             if idx == current_index:
                 ts = f"  [{sub.start:.2f}s ~ {sub.end:.2f}s]"
                 avail = line_width - prefix_len
