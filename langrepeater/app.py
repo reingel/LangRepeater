@@ -1013,7 +1013,7 @@ class AppController:
                 self._play_current()
                 self.ui.show_transcribe_prompt(buf, len(buf), init=True)
                 self.ui.show_transcribe_result(sub.text, user_input)
-            elif ch in (b'\r', b'\n'):  # Enter → 종료
+            elif ch in (b'\r', b'\n', b'c', b'C'):  # Enter / C → 종료
                 self._refresh_display()
                 return
             elif ch == b'\x1b':  # ESC 또는 escape sequence

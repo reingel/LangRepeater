@@ -85,7 +85,7 @@ class RichUI:
         "Transcribe [Tab: play | Opt+V: show/hide subtitle | ESC/Enter: return]"
     )
     _TRANSCRIBE_HINT_RESULT = (
-        "Transcribe [Tab/Space: play | V/Opt+V: show/hide subtitle | ESC/Enter: return]"
+        "Transcribe [Tab/Space: play | V/Opt+V: show/hide subtitle | ESC/Enter/C: return]"
     )
     _TRANSCRIBE_LEGEND = (
         "      \033[1;32m█\033[0m\033[2m correct  "
