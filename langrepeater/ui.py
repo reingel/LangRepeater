@@ -62,6 +62,7 @@ class RichUI:
         (", / .", "  end ±0.1s", "110"),
         ("    U", "merge",       "010"),
         ("    I", "split",       "010"),
+        ("    Y", "retiming",    "010"),
     ]
     _HELP_ETC: list[tuple] = [
         ("P", "segment stats", "110"),

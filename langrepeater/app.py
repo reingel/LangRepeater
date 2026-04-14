@@ -440,6 +440,8 @@ class AppController:
                         self._handle_split()
                 elif action == Action.TRANSCRIBE:
                     self._handle_transcribe()
+                elif action == Action.RESYNC_TIMESTAMP:
+                    self._handle_resync_timestamp()
                 elif action == Action.RESTART:
                     self._handle_restart()
                 elif action == Action.SHIFT_START_EARLIER:
@@ -892,6 +894,158 @@ class AppController:
         if idx_before < len(sub_wts):
             return sub_wts[idx_before].end
         return _proportional()
+
+    _RESYNC_PADDING = 3.0   # seconds of extra audio to read before/after segment
+    _RESYNC_MIN_OVERLAP = 0.5  # minimum word overlap ratio to accept whisper result
+
+    def _handle_resync_timestamp(self) -> None:
+        """Y키: whisper-cli로 현재 구간 주변 오디오를 재분석하여 timestamp 재조정."""
+        if not self.subtitles:
+            return
+        sub = self.subtitles[self.current_index]
+
+        # mp4인 경우 mp3 경로 추론
+        media_path = self.media_path
+        if Path(media_path).suffix.lower() == ".mp4":
+            mp3_path = str(Path(media_path).with_suffix(".mp3"))
+            if not Path(mp3_path).exists():
+                self.ui.show_message("[red]MP3 파일 없음 (mp4→mp3 변환 필요)[/red]")
+                self._refresh_display()
+                return
+            media_path = mp3_path
+
+        pad = self._RESYNC_PADDING
+        clip_start = max(0.0, sub.start - pad)
+        clip_end = sub.end + pad
+
+        self.ui.show_message("[dim]Resyncing timestamp with whisper-cli...[/dim]")
+        if self.player:
+            self.player.stop()
+
+        import tempfile
+        import subprocess
+        import json as _json
+
+        model_path = Path(__file__).parents[1] / "models" / "ggml-small.bin"
+        if not model_path.exists():
+            self.ui.show_message("[red]모델 파일 없음: models/ggml-small.bin[/red]")
+            self._refresh_display()
+            return
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            clip_path = str(Path(tmpdir) / "clip.mp3")
+            # ffmpeg로 구간 추출
+            ff = subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-i", media_path,
+                    "-ss", str(clip_start),
+                    "-to", str(clip_end),
+                    "-q:a", "0",
+                    clip_path,
+                ],
+                capture_output=True,
+            )
+            if ff.returncode != 0:
+                self.ui.show_message("[red]ffmpeg 구간 추출 실패[/red]")
+                self._refresh_display()
+                return
+
+            # whisper-cli 실행 (word-level JSON)
+            ws = subprocess.run(
+                [
+                    "whisper-cli",
+                    "-m", str(model_path),
+                    "-f", clip_path,
+                    "--output-json-full",
+                    "--split-on-word",
+                    "--max-len", "1",
+                    "--dtw", "tiny",
+                    "--no-prints",
+                ],
+                capture_output=True,
+                cwd=tmpdir,
+            )
+            if ws.returncode != 0:
+                self.ui.show_message("[red]whisper-cli 실패[/red]")
+                self._refresh_display()
+                return
+
+            json_path = Path(tmpdir) / "clip.mp3.json"
+            if not json_path.exists():
+                self.ui.show_message("[red]whisper 출력 파일 없음[/red]")
+                self._refresh_display()
+                return
+
+            with open(json_path, encoding="utf-8", errors="replace") as f:
+                data = _json.load(f)
+
+        # word timestamp 파싱 (clip 내 상대 시간 → 절대 시간)
+        words: list[tuple[str, float, float]] = []  # (word, abs_start, abs_end)
+        for seg in data.get("transcription", []):
+            text = seg.get("text", "").strip().strip('"')
+            if not text or text.startswith("["):
+                continue
+            offsets = seg.get("offsets", {})
+            rel_start = offsets.get("from", 0) / 1000.0
+            rel_end = offsets.get("to", 0) / 1000.0
+            words.append((text, clip_start + rel_start, clip_start + rel_end))
+
+        if not words:
+            self.ui.show_message("[red]whisper 결과에 단어 없음[/red]")
+            self._refresh_display()
+            return
+
+        # 현재 자막 텍스트의 단어를 whisper 결과에서 찾아 best match window 결정
+        sub_words = sub.text.split()
+        if not sub_words:
+            self._refresh_display()
+            return
+
+        w_words = [w[0].lower().strip(".,!?;:\"'") for w in words]
+        s_words = [w.lower().strip(".,!?;:\"'") for w in sub_words]
+
+        best_start_abs: float | None = None
+        best_end_abs: float | None = None
+        best_overlap = 0.0
+
+        # sliding window: 자막 단어 수 ± 50% 범위의 window를 sliding하며 최대 overlap 탐색
+        min_win = max(1, len(s_words) // 2)
+        max_win = len(s_words) + len(s_words) // 2
+        for win_size in range(min_win, min(max_win + 1, len(w_words) + 1)):
+            for i in range(len(w_words) - win_size + 1):
+                window = w_words[i:i + win_size]
+                matched = sum(1 for sw in s_words if sw in window)
+                overlap = matched / len(s_words)
+                if overlap > best_overlap:
+                    best_overlap = overlap
+                    best_start_abs = words[i][1]
+                    best_end_abs = words[i + win_size - 1][2]
+
+        if best_overlap < self._RESYNC_MIN_OVERLAP or best_start_abs is None or best_end_abs is None:
+            self.ui.show_message(
+                f"[yellow]매칭 신뢰도 낮음 ({best_overlap:.0%}) — timestamp 미변경[/yellow]"
+            )
+            self._refresh_display()
+            return
+
+        # 인접 자막과 겹치지 않도록 clamp
+        prev_end = self.subtitles[self.current_index - 1].end if self.current_index > 0 else 0.0
+        next_start = self.subtitles[self.current_index + 1].start if self.current_index < len(self.subtitles) - 1 else float("inf")
+
+        new_start = round(max(prev_end + 0.01, best_start_abs), 2)
+        new_end = round(min(next_start - 0.01, best_end_abs), 2)
+
+        if new_end <= new_start:
+            self.ui.show_message("[red]재조정 결과가 유효하지 않음 — 미변경[/red]")
+            self._refresh_display()
+            return
+
+        sub.start = new_start
+        sub.end = new_end
+        self.srt_parser.save(self.srt_path, self.subtitles)
+        self._refresh_display()
+        self._play_current()
 
     def _handle_transcribe(self) -> None:
         if not self.subtitles:
