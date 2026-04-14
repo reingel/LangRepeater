@@ -31,7 +31,8 @@ class Action(Enum):
     BOOKMARK = auto()
     BOOKMARK_LIST = auto()
     BOOKMARK_SELECT = auto()
-    RESYNC_TIMESTAMP = auto()
+    RESYNC_START = auto()
+    RESYNC_END = auto()
 
 
 _CHAR_MAP: dict[str, Action] = {
@@ -61,7 +62,8 @@ _CHAR_MAP: dict[str, Action] = {
     "p": Action.PRINT_STATS,
     "9": Action.PRINT_DATE_STATS,
     "0": Action.BOOKMARK_LIST,
-    "e": Action.RESYNC_TIMESTAMP,
+    "w": Action.RESYNC_START,
+    "e": Action.RESYNC_END,
 }
 
 

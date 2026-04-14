@@ -150,7 +150,8 @@ Type the sentence you heard and press `Enter`. Correct words are shown in green,
 | `X` | Start time +0.1s |
 | `,` | End time −0.1s |
 | `.` | End time +0.1s |
-| `E` | Retiming using whisper-cli |
+| `W` | Retime start using whisper-cli |
+| `E` | Retime end using whisper-cli |
 
 ### Segment Editing (Listen & Repeat mode only)
 

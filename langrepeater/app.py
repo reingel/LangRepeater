@@ -440,8 +440,10 @@ class AppController:
                         self._handle_split()
                 elif action == Action.TRANSCRIBE:
                     self._handle_transcribe()
-                elif action == Action.RESYNC_TIMESTAMP:
-                    self._handle_resync_timestamp()
+                elif action == Action.RESYNC_START:
+                    self._handle_resync_timestamp(resync_end=False)
+                elif action == Action.RESYNC_END:
+                    self._handle_resync_timestamp(resync_start=False)
                 elif action == Action.RESTART:
                     self._handle_restart()
                 elif action == Action.SHIFT_START_EARLIER:
@@ -916,8 +918,8 @@ class AppController:
     _RESYNC_MIN_MATCH = 0.6      # minimum match ratio for prefix/suffix anchor
     _RESYNC_ANCHOR_WORDS = 3     # number of leading/trailing words used for anchoring
 
-    def _handle_resync_timestamp(self) -> None:
-        """E키: whisper-cli로 현재 구간 주변 오디오를 재분석하여 timestamp 재조정."""
+    def _handle_resync_timestamp(self, resync_start: bool = True, resync_end: bool = True) -> None:
+        """W/E키: whisper-cli로 현재 구간 주변 오디오를 재분석하여 start/end timestamp 재조정."""
         if not self.subtitles:
             return
         sub = self.subtitles[self.current_index]
@@ -1042,29 +1044,28 @@ class AppController:
         prefix = s_norm[:n_anchor]
         suffix = s_norm[-n_anchor:]
 
-        # 앞부분 매칭 → start time
-        start_i, start_score = _find_sequence(prefix)
-        if start_score < self._RESYNC_MIN_MATCH or start_i < 0:
-            self.ui.show_message(f"[yellow]앞부분 매칭 실패 ({start_score:.0%}) — 미변경[/yellow]")
-            self._refresh_display()
-            return
-
-        # 뒷부분 매칭 → end time (start_i 이후에서 탐색)
-        end_i, end_score = _find_sequence(suffix, from_idx=start_i)
-        if end_score < self._RESYNC_MIN_MATCH or end_i < 0:
-            self.ui.show_message(f"[yellow]뒷부분 매칭 실패 ({end_score:.0%}) — 미변경[/yellow]")
-            self._refresh_display()
-            return
-
-        best_start_abs = words[start_i][1]
-        best_end_abs = words[end_i + n_anchor - 1][2]
-
-        # 인접 자막과 겹치지 않도록 clamp
         prev_end = self.subtitles[self.current_index - 1].end if self.current_index > 0 else 0.0
         next_start = self.subtitles[self.current_index + 1].start if self.current_index < len(self.subtitles) - 1 else float("inf")
 
-        new_start = round(max(prev_end + 0.01, best_start_abs), 2)
-        new_end = round(min(next_start - 0.01, best_end_abs), 2)
+        new_start = sub.start
+        new_end = sub.end
+
+        if resync_start:
+            start_i, start_score = _find_sequence(prefix)
+            if start_score < self._RESYNC_MIN_MATCH or start_i < 0:
+                self.ui.show_message(f"[yellow]앞부분 매칭 실패 ({start_score:.0%}) — 미변경[/yellow]")
+                self._refresh_display()
+                return
+            new_start = round(max(prev_end + 0.01, words[start_i][1]), 2)
+
+        if resync_end:
+            from_idx = 0 if not resync_start else start_i
+            end_i, end_score = _find_sequence(suffix, from_idx=from_idx)
+            if end_score < self._RESYNC_MIN_MATCH or end_i < 0:
+                self.ui.show_message(f"[yellow]뒷부분 매칭 실패 ({end_score:.0%}) — 미변경[/yellow]")
+                self._refresh_display()
+                return
+            new_end = round(min(next_start - 0.01, words[end_i + n_anchor - 1][2]), 2)
 
         if new_end <= new_start:
             self.ui.show_message("[red]재조정 결과가 유효하지 않음 — 미변경[/red]")
@@ -1075,7 +1076,12 @@ class AppController:
         sub.end = new_end
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
-        self._play_current()
+        if resync_start and not resync_end:
+            self._play_preview(sub.start, min(sub.end, sub.start + 1.0))
+        elif resync_end and not resync_start:
+            self._play_preview(max(sub.start, sub.end - 1.0), sub.end)
+        else:
+            self._play_current()
 
     def _handle_transcribe(self) -> None:
         if not self.subtitles:
