@@ -147,10 +147,21 @@ class VLCAudioPlayer(AudioPlayer):
         self._start_pos = start
 
         media = self._vlc.Media(path)
-        media.add_option(f":start-time={start:.3f}")  # seek on open, avoids set_time() race
         self._player.set_media(media)
         self._player.video_set_track(-1)
         self._player.play()
+
+        # :start-time 옵션은 오디오 파이프라인 초기화 전에 적용되어
+        # 시작 부분이 잘리는 문제가 있음. play() 후 Playing 상태가 되면
+        # set_time()으로 정확하게 seek한다.
+        deadline = time.monotonic() + 0.3
+        while time.monotonic() < deadline:
+            if self._player.get_state() == self._vlc.State.Playing:
+                break
+            time.sleep(0.005)
+        if start > 0:
+            self._player.set_time(int(start * 1000))
+
         self._play_start_time = time.monotonic()
 
         if end is not None:
