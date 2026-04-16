@@ -565,11 +565,12 @@ class AppController:
         """
         import random
         stats = self.stats_store.load(self.media_path)
+        idx_to_pos = {sub.index: i for i, sub in enumerate(self.subtitles)}
         valid: dict[int, int] = {}
-        for idx_1based, count in stats.subtitle_play_counts.items():
-            idx_0based = int(idx_1based) - 1
-            if count > 0 and 0 <= idx_0based < len(self.subtitles):
-                valid[idx_0based] = count
+        for idx, count in stats.subtitle_play_counts.items():
+            pos = idx_to_pos.get(idx)
+            if pos is not None and count > 0:
+                valid[pos] = count
         if len(valid) < 10:
             return None
 
