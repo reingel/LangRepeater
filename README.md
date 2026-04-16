@@ -10,7 +10,7 @@ The following external tools must be installed before using LangRepeater:
 
 ### ffmpeg
 
-Required for extracting audio from MP4 files.
+Required for MP4 audio extraction and sibilant (de-esser) processing.
 
 ```bash
 brew install ffmpeg
@@ -28,7 +28,7 @@ pip install yt-dlp
 
 ### whisper-cli
 
-Required for auto-generating subtitle files from audio.
+Required for auto-generating subtitle files from audio and retiming timestamps.
 
 Install [whisper.cpp](https://github.com/ggerganov/whisper.cpp) and make `whisper-cli` available in your PATH.
 
@@ -142,16 +142,18 @@ Plays the entire file continuously from the current segment. Subtitles update au
 
 Type the sentence you heard and press `Enter`. Correct words are shown in green, wrong case/punctuation in yellow, incorrect words in red. A 👍 is displayed if the entire sentence matches.
 
-### Timestamp Adjustment (Listen & Repeat / Review mode)
+### Timestamp Adjustment
 
-| Key | Action |
-|---|---|
-| `Z` | Start time −0.1s |
-| `X` | Start time +0.1s |
-| `,` | End time −0.1s |
-| `.` | End time +0.1s |
-| `W` | Retime start using whisper-cli |
-| `E` | Retime end using whisper-cli |
+| Key | Mode | Action |
+|---|---|---|
+| `Z` | LR / Review | Start time −0.1s |
+| `X` | LR / Review | Start time +0.1s |
+| `,` | LR / Review | End time −0.1s |
+| `.` | LR / Review | End time +0.1s |
+| `W` | LR | Retime start using whisper-cli |
+| `E` | LR | Retime end using whisper-cli |
+| `R` | LR | Retime both start and end using whisper-cli |
+| `Y` | LR / Review | Retime using whisper-cli |
 
 ### Segment Editing (Listen & Repeat mode only)
 
@@ -160,17 +162,34 @@ Type the sentence you heard and press `Enter`. Correct words are shown in green,
 | `U` | Merge with next segment |
 | `I` | Split current segment |
 
-When splitting (`I`), candidate split points (punctuation or conjunctions) are highlighted inline. Enter the number to split at that point, or `C` to cancel.
+When splitting (`I`), candidate split points (punctuation or conjunctions) are highlighted inline. Enter the number to split at that point, or `ESC` to cancel.
 
-### Statistics
+### Statistics & Bookmarks
 
 | Key | Action |
 |---|---|
 | `P` | Segment stats (play count per segment) |
-| `0` | Date stats (daily activity) |
-| `R` | Resample review list (Review mode) |
-| `]` | Next stats page |
-| `[` | Previous stats page |
+| `9` | Date stats (daily activity) |
+| `0` | Bookmark list |
+| `B` | Add / remove bookmark for current segment |
+| `R` | Resample review list (Review mode only) |
+| `]` | Next page (stats / bookmark screens) |
+| `[` | Previous page (stats / bookmark screens) |
 | any other key | Back to study |
 
-Segment stats show segments in order with play counts and total learning time. Date stats show daily segment/repeat counts and net play time. `]` / `[` navigate stats pages while a stats screen is open, and skip 3 segments during normal playback.
+Segment stats show segments ranked by play count. Date stats show daily segment/repeat counts and net play time.
+
+---
+
+## Sibilant Reduction (De-esser)
+
+LangRepeater applies a high-frequency de-esser to MP3 playback to reduce harsh sibilant sounds ("s", "sh", etc.). Processing is done via ffmpeg on each segment before playback.
+
+| Key | Action |
+|---|---|
+| `;` | Increase sibilant reduction (more de-essing) |
+| `'` | Decrease sibilant reduction (less de-essing, min 0 dB) |
+
+The current reduction level is shown below the playback bar when adjusted. The setting is saved automatically to `settings.yaml` and restored on next launch.
+
+Default reduction: **8.0 dB** at **7000 Hz** high-shelf cutoff.
