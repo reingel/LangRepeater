@@ -71,6 +71,11 @@ class PygameAudioPlayer(AudioPlayer):
         self._de_esser_reduction_db = de_esser_reduction_db
         self._temp_file: str | None = None
 
+    def adjust_de_esser(self, delta: float) -> float:
+        """de_esser_reduction_db를 delta만큼 조정하고 새 값을 반환한다. 최소 0."""
+        self._de_esser_reduction_db = max(0.0, self._de_esser_reduction_db + delta)
+        return self._de_esser_reduction_db
+
     def _cleanup_temp(self) -> None:
         if self._temp_file:
             try:

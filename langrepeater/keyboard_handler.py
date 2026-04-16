@@ -33,6 +33,8 @@ class Action(Enum):
     BOOKMARK_SELECT = auto()
     RESYNC_START = auto()
     RESYNC_END = auto()
+    SIBILANT_DOWN = auto()
+    SIBILANT_UP = auto()
 
 
 _CHAR_MAP: dict[str, Action] = {
@@ -64,6 +66,8 @@ _CHAR_MAP: dict[str, Action] = {
     "0": Action.BOOKMARK_LIST,
     "w": Action.RESYNC_START,
     "e": Action.RESYNC_END,
+    ";": Action.SIBILANT_DOWN,
+    "'": Action.SIBILANT_UP,
 }
 
 

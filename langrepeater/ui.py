@@ -65,10 +65,14 @@ class RichUI:
         ("    W", "retime start", "010"),
         ("    E", "retime end",   "010"),
     ]
-    _HELP_ETC: list[tuple] = [
+    _HELP_INFO: list[tuple] = [
         ("P", "segment stats", "110"),
         ("9", "date stats",    "110"),
         ("0", "bookmark list", "010"),
+    ]
+    _HELP_SETTING: list[tuple] = [
+        (";", "sibilant down", "111"),
+        ("'", "sibilant up",   "111"),
     ]
 
     _HELP_TEXT_STATS = "[dim]↑/↓: move  |  Enter: go  |  [ ]: prev/next page  |  any key: back[/dim]"
@@ -123,7 +127,8 @@ class RichUI:
             ("Navigate", RichUI._HELP_NAV),
             ("Study",    RichUI._HELP_STUDY),
             ("Subtitle", RichUI._HELP_SUBTITLE),
-            ("Info",     RichUI._HELP_ETC),
+            ("Info",     RichUI._HELP_INFO),
+            ("Setting",  RichUI._HELP_SETTING),
         ]
 
         # 모드 무관 고정 컬럼 폭 계산
@@ -135,7 +140,7 @@ class RichUI:
             col_widths.append(w)
 
         # 터미널 폭에 맞게 초과분을 마지막 컬럼부터 균등 축소
-        sep_total = 3 * (len(col_defs) - 1)  # " | " × 3
+        sep_total = 3 * (len(col_defs) - 1)  # " | " × 4
         avail = console.width - 4 - sep_total  # border 2 + padding 2
         total = sum(col_widths)
         if total > avail and avail > 0:
@@ -179,7 +184,8 @@ class RichUI:
             ("Navigate", RichUI._HELP_NAV),
             ("Study",    RichUI._HELP_STUDY),
             ("Subtitle", RichUI._HELP_SUBTITLE),
-            ("Info",     RichUI._HELP_ETC),
+            ("Info",     RichUI._HELP_INFO),
+            ("Setting",  RichUI._HELP_SETTING),
         ]
         sep_total = 3 * (len(col_defs) - 1)
         natural_total = sum(

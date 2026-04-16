@@ -6,11 +6,12 @@ import time
 import tty
 from pathlib import Path
 
-from .core.audio_player import AudioPlayer, create_player
+from .core.audio_player import AudioPlayer, PygameAudioPlayer, create_player
 from .core.bookmark_store import BookmarkStore
 from .core.file_finder import FileFinder
 from .core.models import Session, Subtitle, _index_key, _merged_index, _split_indices
 from .core.progress_store import ProgressStore
+from .core.settings_store import SettingsStore
 from .core.stats_store import StatsStore
 from .core.srt_parser import SRTParser, _words_json_path, _words_yaml_path
 from .keyboard_handler import Action, read_action
@@ -29,6 +30,8 @@ class AppController:
     def __init__(self) -> None:
         self.ui = RichUI()
         self.progress_store = ProgressStore()
+        self.settings_store = SettingsStore()
+        self.settings_store.load()
         self.stats_store = StatsStore()
         self.bookmark_store = BookmarkStore()
         self.file_finder = FileFinder()
@@ -265,6 +268,8 @@ class AppController:
 
     def _init_player(self) -> None:
         self.player = create_player(self.media_path)
+        if isinstance(self.player, PygameAudioPlayer):
+            self.player._de_esser_reduction_db = self.settings_store.de_esser_reduction_db
 
     # ------------------------------------------------------------------
     # Main loop
@@ -444,6 +449,10 @@ class AppController:
                     self._handle_resync_timestamp(resync_end=False)
                 elif action == Action.RESYNC_END:
                     self._handle_resync_timestamp(resync_start=False)
+                elif action == Action.SIBILANT_DOWN:
+                    self._handle_sibilant(+1.0)
+                elif action == Action.SIBILANT_UP:
+                    self._handle_sibilant(-1.0)
                 elif action == Action.RESTART:
                     self._handle_restart()
                 elif action == Action.SHIFT_START_EARLIER:
@@ -918,6 +927,21 @@ class AppController:
     _RESYNC_PADDING = 3.0        # seconds of extra audio to read before/after segment
     _RESYNC_MIN_MATCH = 0.6      # minimum match ratio for prefix/suffix anchor
     _RESYNC_ANCHOR_WORDS = 3     # number of leading/trailing words used for anchoring
+
+    def _handle_sibilant(self, delta: float) -> None:
+        """;/\'키: de_esser_reduction_db 값만 조정하고 재생바 아래에 현재 값을 표시한다."""
+        import sys
+        if not isinstance(self.player, PygameAudioPlayer):
+            return
+        new_val = self.player.adjust_de_esser(delta)
+        self.settings_store.de_esser_reduction_db = new_val
+        # 재생바 한 줄 아래에 힌트를 출력한 뒤 커서를 다시 올려
+        # update_animation_line의 "\033[1A" 기준선을 유지한다.
+        sys.stdout.write(
+            f"\r\033[2K\033[2m         sibilant reduction: {new_val:.1f} dB\033[0m\n"
+            "\033[1A"
+        )
+        sys.stdout.flush()
 
     def _handle_resync_timestamp(self, resync_start: bool = True, resync_end: bool = True) -> None:
         """W/E키: whisper-cli로 현재 구간 주변 오디오를 재분석하여 start/end timestamp 재조정."""
