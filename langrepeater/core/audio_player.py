@@ -1,5 +1,6 @@
 import contextlib
 import os
+import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -44,9 +45,17 @@ class AudioPlayer(ABC):
 
 
 class PygameAudioPlayer(AudioPlayer):
-    """mp3 player using pygame.mixer.music with seek support (no pydub needed)."""
+    """mp3 player using pygame.mixer.music with seek support.
 
-    def __init__(self) -> None:
+    de_esser=True 시 ffmpeg으로 치찰음 대역(cutoff_hz 이상)을 reduction_db만큼 감쇄한다.
+    """
+
+    def __init__(
+        self,
+        de_esser: bool = True,
+        de_esser_cutoff_hz: int = 7000,
+        de_esser_reduction_db: float = 8.0,
+    ) -> None:
         import pygame
         pygame.mixer.init()
         self._pygame = pygame
@@ -57,6 +66,42 @@ class PygameAudioPlayer(AudioPlayer):
         self._paused_offset: float = 0.0  # cumulative play time before current play period
         self._on_complete: Callable | None = None
         self._start_pos: float = 0.0
+        self._de_esser = de_esser
+        self._de_esser_cutoff_hz = de_esser_cutoff_hz
+        self._de_esser_reduction_db = de_esser_reduction_db
+        self._temp_file: str | None = None
+
+    def _cleanup_temp(self) -> None:
+        if self._temp_file:
+            try:
+                os.unlink(self._temp_file)
+            except OSError:
+                pass
+            self._temp_file = None
+
+    def _process_de_esser(self, path: str, start: float, end: float | None) -> tuple[str, float | None]:
+        """ffmpeg으로 치찰음 제거 후 임시 WAV 파일 경로와 재생 길이(초)를 반환한다."""
+        import subprocess
+
+        fd, tmp_path = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+
+        duration: float | None = end - start if end is not None else None
+
+        # ffmpeg equalizer 필터: high-shelf로 치찰음 대역 감쇄
+        # f=cutoff, t=h(high-shelf), width=bandwith, g=gain(dB, 음수=감쇄)
+        af = (
+            f"equalizer=f={self._de_esser_cutoff_hz}:t=h"
+            f":width={self._de_esser_cutoff_hz}:g=-{self._de_esser_reduction_db}"
+        )
+
+        cmd = ["ffmpeg", "-y", "-ss", str(start), "-i", path]
+        if end is not None:
+            cmd += ["-t", str(duration)]
+        cmd += ["-af", af, "-ar", "44100", tmp_path]
+
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        return tmp_path, duration
 
     def play_segment(self, path: str, start: float, end: float | None = None, on_complete: Callable | None = None) -> None:
         self.stop()
@@ -64,17 +109,32 @@ class PygameAudioPlayer(AudioPlayer):
         self._paused_offset = 0.0
         self._on_complete = on_complete
         self._start_pos = start
-        music = self._pygame.mixer.music
-        with _suppress_stderr():
-            music.load(path)
-            music.play(start=start)
-        self._play_start_time = time.monotonic()
 
-        if end is not None:
-            self._remaining = end - start
-            self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
-            self._stop_timer.daemon = True
-            self._stop_timer.start()
+        music = self._pygame.mixer.music
+
+        if self._de_esser:
+            self._cleanup_temp()
+            tmp_path, duration = self._process_de_esser(path, start, end)
+            self._temp_file = tmp_path
+            with _suppress_stderr():
+                music.load(tmp_path)
+                music.play(start=0)
+            self._play_start_time = time.monotonic()
+            if duration is not None:
+                self._remaining = duration
+                self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
+                self._stop_timer.daemon = True
+                self._stop_timer.start()
+        else:
+            with _suppress_stderr():
+                music.load(path)
+                music.play(start=start)
+            self._play_start_time = time.monotonic()
+            if end is not None:
+                self._remaining = end - start
+                self._stop_timer = threading.Timer(self._remaining, self._on_segment_end)
+                self._stop_timer.daemon = True
+                self._stop_timer.start()
 
     def _on_segment_end(self) -> None:
         self._pygame.mixer.music.stop()
@@ -121,6 +181,7 @@ class PygameAudioPlayer(AudioPlayer):
             self._stop_timer = None
         self._paused = False
         self._pygame.mixer.music.stop()
+        self._cleanup_temp()
 
 
 class VLCAudioPlayer(AudioPlayer):
