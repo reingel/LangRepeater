@@ -64,6 +64,7 @@ class RichUI:
         ("    I", "split",       "010"),
         ("    W", "retime start", "010"),
         ("    E", "retime end",   "010"),
+        ("    R", "retime both",  "010"),
     ]
     _HELP_ETC: list[tuple] = [
         ("P", "segment stats", "110"),

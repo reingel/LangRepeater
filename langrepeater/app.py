@@ -401,8 +401,10 @@ class AppController:
                             self._handle_review()
                 elif action == Action.BACK:
                     self._handle_back()
-                elif action == Action.REVIEW:
+                elif self._mode == "R" and action == Action.REVIEW:
                     self._handle_review()
+                elif self._mode == "LR" and action == Action.REVIEW:
+                    self._handle_resync_timestamp()
                 elif self._mode == "R" and action == Action.NEXT:
                     self._handle_review_next()
                 elif self._mode == "R" and action == Action.PREV:
