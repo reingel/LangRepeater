@@ -427,7 +427,7 @@ class RichUI:
             display_text = self._mask_text(sub.text) if masked else sub.text
             bm_marker = "  *  " if (bookmarks and sub.index in bookmarks) else "     "
             before, after = _cut_markers(sub.text)
-            num_str = f"{before + str(sub.index) + after:<6}"  # 6자 고정
+            num_str = f"{before + str(sub.index) + after:<6}"[:6]  # 6자 고정
             if idx == current_index:
                 ts = f"  [{sub.start:.2f}s ~ {sub.end:.2f}s]"
                 avail = line_width - prefix_len
