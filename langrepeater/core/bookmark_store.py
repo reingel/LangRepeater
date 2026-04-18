@@ -4,11 +4,12 @@ import yaml
 
 from .models import _index_key
 
-DEFAULT_PATH = "bookmark.yaml"
+_APP_DIR = Path.home() / ".langrepeater"
+DEFAULT_PATH = _APP_DIR / "bookmark.yaml"
 
 
 class BookmarkStore:
-    def __init__(self, path: str = DEFAULT_PATH):
+    def __init__(self, path: Path = DEFAULT_PATH):
         self.path = Path(path)
 
     def _load_all(self) -> dict:
@@ -21,6 +22,7 @@ class BookmarkStore:
             return {}
 
     def _save_all(self, data: dict) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(
             yaml.dump(data, allow_unicode=True, width=float("inf")),
             encoding="utf-8",

@@ -4,11 +4,12 @@ import yaml
 
 from .models import Session
 
-DEFAULT_PATH = "progress.yaml"
+_APP_DIR = Path.home() / ".langrepeater"
+DEFAULT_PATH = _APP_DIR / "progress.yaml"
 
 
 class ProgressStore:
-    def __init__(self, path: str = DEFAULT_PATH):
+    def __init__(self, path: Path = DEFAULT_PATH):
         self.path = Path(path)
 
     def load(self) -> list[Session]:
@@ -41,6 +42,7 @@ class ProgressStore:
                 for s in sessions
             ]
         }
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(yaml.dump(data, allow_unicode=True, width=float("inf")), encoding="utf-8")
 
     def delete(self, index: int) -> None:

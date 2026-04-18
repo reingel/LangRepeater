@@ -2,14 +2,15 @@ from pathlib import Path
 
 import yaml
 
-DEFAULT_PATH = "settings.yaml"
+_APP_DIR = Path.home() / ".langrepeater"
+DEFAULT_PATH = _APP_DIR / "settings.yaml"
 _DEFAULTS: dict = {
     "de_esser_reduction_db": 8.0,
 }
 
 
 class SettingsStore:
-    def __init__(self, path: str = DEFAULT_PATH):
+    def __init__(self, path: Path = DEFAULT_PATH):
         self.path = Path(path)
         self._data: dict = dict(_DEFAULTS)
 
@@ -25,6 +26,7 @@ class SettingsStore:
 
     def _save(self) -> None:
         try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
             self.path.write_text(yaml.dump(self._data, allow_unicode=True), encoding="utf-8")
         except Exception:
             pass

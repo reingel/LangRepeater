@@ -5,12 +5,13 @@ import yaml
 
 from .models import SessionStats
 
-SEGMENT_PATH = "stat-segment.yaml"
-DATE_PATH = "stat-date.yaml"
+_APP_DIR = Path.home() / ".langrepeater"
+SEGMENT_PATH = _APP_DIR / "stat-segment.yaml"
+DATE_PATH = _APP_DIR / "stat-date.yaml"
 
 
 class StatsStore:
-    def __init__(self, segment_path: str = SEGMENT_PATH, date_path: str = DATE_PATH):
+    def __init__(self, segment_path: Path = SEGMENT_PATH, date_path: Path = DATE_PATH):
         self.path = Path(segment_path)
         self._date_path = Path(date_path)
 
@@ -28,6 +29,7 @@ class StatsStore:
             return {}
 
     def _save_raw(self, data: dict) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(yaml.dump(data, allow_unicode=True, width=float("inf")), encoding="utf-8")
 
     def load(self, media_path: str) -> SessionStats:
@@ -112,6 +114,7 @@ class StatsStore:
             return {}
 
     def _save_date_raw(self, data: dict) -> None:
+        self._date_path.parent.mkdir(parents=True, exist_ok=True)
         self._date_path.write_text(yaml.dump(data, allow_unicode=True, width=float("inf")), encoding="utf-8")
 
     def _increment_date_play(self, media_path: str, subtitle_index: str) -> None:
