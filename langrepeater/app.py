@@ -284,6 +284,8 @@ class AppController:
         self._old_settings = old_settings
         try:
             tty.setcbreak(fd)  # disable echo while keeping Ctrl+C working
+            sys.stdout.write("\033[?25l")
+            sys.stdout.flush()
             running = True
             restart = False
             while running:
@@ -481,6 +483,8 @@ class AppController:
                 elif action == Action.STATS_PREV:
                     self._handle_l_page(-1)
         finally:
+            sys.stdout.write("\033[?25h")
+            sys.stdout.flush()
             termios.tcflush(fd, termios.TCIFLUSH)
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         return restart
@@ -926,7 +930,8 @@ class AppController:
             return sub_wts[idx_before].end
         return _proportional()
 
-    _RESYNC_PADDING = 3.0        # seconds of extra audio to read before/after segment
+    _RESYNC_PADDING = 3.0        # seconds of extra audio to read after segment
+    _RESYNC_START_PADDING = 6.0  # seconds of extra audio to read before segment start
     _RESYNC_MIN_MATCH = 0.6      # minimum match ratio for prefix/suffix anchor
     _RESYNC_ANCHOR_WORDS = 3     # number of leading/trailing words used for anchoring
 
@@ -961,9 +966,9 @@ class AppController:
                 return
             media_path = mp3_path
 
-        pad = self._RESYNC_PADDING
-        clip_start = max(0.0, sub.start - pad)
-        clip_end = sub.end + pad
+        start_pad = self._RESYNC_START_PADDING if resync_start else self._RESYNC_PADDING
+        clip_start = max(0.0, sub.start - start_pad)
+        clip_end = sub.end + self._RESYNC_PADDING
 
         self.ui.show_message("[dim]Resyncing timestamp with whisper-cli...[/dim]")
         if self.player:

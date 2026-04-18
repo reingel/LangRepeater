@@ -96,8 +96,9 @@ class PygameAudioPlayer(AudioPlayer):
         # ffmpeg equalizer 필터: high-shelf로 치찰음 대역 감쇄
         # f=cutoff, t=h(high-shelf), width=bandwith, g=gain(dB, 음수=감쇄)
         af = (
-            f"equalizer=f={self._de_esser_cutoff_hz}:t=h"
-            f":width={self._de_esser_cutoff_hz}:g=-{self._de_esser_reduction_db}"
+            # f"equalizer=f={self._de_esser_cutoff_hz}:t=h"
+            # f":width={self._de_esser_cutoff_hz}:g=-{self._de_esser_reduction_db}"
+            f"highshelf=f={self._de_esser_cutoff_hz}:g=-{self._de_esser_reduction_db}"
         )
 
         cmd = ["ffmpeg", "-y", "-ss", str(start), "-i", path]
