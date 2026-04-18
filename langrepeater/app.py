@@ -541,15 +541,16 @@ class AppController:
             self._play_current()
 
     def _save_progress(self) -> None:
+        save_index = self._lr_mode_index if self._mode == "L" else self.current_index
         self.progress_store.upsert(Session(
             media_path=self.media_path,
             srt_path=self.srt_path,
-            current_index=self.current_index,
+            current_index=save_index,
             total_segments=len(self.subtitles),
         ))
         if self.subtitles:
             self.stats_store.update_progress(
-                self.media_path, self.current_index, len(self.subtitles)
+                self.media_path, save_index, len(self.subtitles)
             )
 
     _SENTENCE_END_PUNCT = frozenset('.!?。！？')
