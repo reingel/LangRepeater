@@ -1122,24 +1122,39 @@ class AppController:
         # cbreak 모드 유지 - 입력 중 단축키(Option+key) 처리를 위해 직접 읽기
         buf: list[str] = []
         cursor_pos: int = 0
-        self.ui.show_transcribe_prompt(buf, cursor_pos, init=True)
+        blink_on: bool = True
+        last_blink: float = time.time()
+        self.ui.show_transcribe_prompt(buf, cursor_pos, init=True, show_cursor=True)
 
         while True:
             rlist, _, _ = select.select([self._fd], [], [], 0.1)
             if not rlist:
+                now = time.time()
+                if now - last_blink >= 0.5:
+                    blink_on = not blink_on
+                    last_blink = now
+                    self.ui.show_transcribe_prompt(buf, cursor_pos, show_cursor=blink_on)
                 continue
             ch = os.read(self._fd, 1)
+
+            def _redraw(init: bool = False) -> None:
+                nonlocal blink_on, last_blink
+                blink_on = True
+                last_blink = time.time()
+                self.ui.show_transcribe_prompt(buf, cursor_pos, init=init, show_cursor=True)
 
             if ch in (b'\r', b'\n'):  # Enter → 제출
                 break
             elif ch == b'\t':  # Tab → 처음부터 다시 재생
                 self._refresh_display()
                 self._play_current()
-                self.ui.show_transcribe_prompt(buf, cursor_pos, init=True)
+                _redraw(init=True)
             elif ch == b'\x1b':  # ESC 또는 escape sequence
                 rlist2, _, _ = select.select([self._fd], [], [], 0.05)
                 if not rlist2:
                     # 단독 ESC → 취소
+                    sys.stdout.write("\033[?25l")
+                    sys.stdout.flush()
                     self._refresh_display()
                     return
                 ch2 = os.read(self._fd, 1)
@@ -1155,51 +1170,53 @@ class AppController:
                             break
                     if seq == b'D':  # ← 왼쪽 화살표
                         cursor_pos = max(0, cursor_pos - 1)
-                        self.ui.show_transcribe_prompt(buf, cursor_pos)
+                        _redraw()
                     elif seq == b'C':  # → 오른쪽 화살표
                         cursor_pos = min(len(buf), cursor_pos + 1)
-                        self.ui.show_transcribe_prompt(buf, cursor_pos)
+                        _redraw()
                     elif seq in (b'1;3D', b'1;9D'):  # Opt+← 단어 왼쪽
                         while cursor_pos > 0 and buf[cursor_pos - 1] == ' ':
                             cursor_pos -= 1
                         while cursor_pos > 0 and buf[cursor_pos - 1] != ' ':
                             cursor_pos -= 1
-                        self.ui.show_transcribe_prompt(buf, cursor_pos)
+                        _redraw()
                     elif seq in (b'1;3C', b'1;9C'):  # Opt+→ 단어 오른쪽
                         while cursor_pos < len(buf) and buf[cursor_pos] == ' ':
                             cursor_pos += 1
                         while cursor_pos < len(buf) and buf[cursor_pos] != ' ':
                             cursor_pos += 1
-                        self.ui.show_transcribe_prompt(buf, cursor_pos)
+                        _redraw()
                 elif ch2 == b'b':  # Opt+← (emacs 스타일)
                     while cursor_pos > 0 and buf[cursor_pos - 1] == ' ':
                         cursor_pos -= 1
                     while cursor_pos > 0 and buf[cursor_pos - 1] != ' ':
                         cursor_pos -= 1
-                    self.ui.show_transcribe_prompt(buf, cursor_pos)
+                    _redraw()
                 elif ch2 == b'f':  # Opt+→ (emacs 스타일)
                     while cursor_pos < len(buf) and buf[cursor_pos] == ' ':
                         cursor_pos += 1
                     while cursor_pos < len(buf) and buf[cursor_pos] != ' ':
                         cursor_pos += 1
-                    self.ui.show_transcribe_prompt(buf, cursor_pos)
+                    _redraw()
                 elif ch2 == b'v':  # Opt+V → 자막 보이기/감추기
                     self._subtitle_masked = not self._subtitle_masked
                     self._refresh_display()
-                    self.ui.show_transcribe_prompt(buf, cursor_pos, init=True)
+                    _redraw(init=True)
                 # 그 외 escape sequence → 무시
             elif ch in (b'\x7f', b'\x08'):  # Backspace
                 if cursor_pos > 0:
                     buf.pop(cursor_pos - 1)
                     cursor_pos -= 1
-                    self.ui.show_transcribe_prompt(buf, cursor_pos)
+                    _redraw()
             else:
                 char = ch.decode('utf-8', errors='ignore')
                 if char.isprintable():
                     buf.insert(cursor_pos, char)
                     cursor_pos += 1
-                    self.ui.show_transcribe_prompt(buf, cursor_pos)
+                    _redraw()
 
+        sys.stdout.write("\033[?25l")
+        sys.stdout.flush()
         user_input = ''.join(buf).strip()
         if not user_input:
             self._refresh_display()

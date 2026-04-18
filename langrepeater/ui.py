@@ -739,24 +739,24 @@ class RichUI:
                     return n
             console.print(f"[red]Please enter a number between 1 and {total}.[/red]")
 
-    def show_transcribe_prompt(self, buf: list[str], cursor_pos: int, init: bool = False) -> None:
+    def show_transcribe_prompt(self, buf: list[str], cursor_pos: int, init: bool = False, show_cursor: bool = True) -> None:
         """받아쓰기 입력 프롬프트 표시.
         init=True: 힌트 줄 + 프롬프트 줄 새로 출력.
         init=False: 현재 프롬프트 줄만 덮어쓰기.
         cursor_pos: buf 내 커서 위치 (0 = 맨 앞).
+        show_cursor: True = 커서 위치에 언더바 표시, False = 원래 문자 표시.
         """
-        typed = ''.join(buf)
+        before = ''.join(buf[:cursor_pos])
+        orig_char = buf[cursor_pos] if cursor_pos < len(buf) else ' '
+        after = ''.join(buf[cursor_pos + 1:]) if cursor_pos < len(buf) else ''
+        cursor_cell = "\033[4m_\033[0m" if show_cursor else orig_char
+        line = f"> {before}{cursor_cell}{after}"
         if init:
-            sys.stdout.write(
-                f"\n\033[2m{self._TRANSCRIBE_HINT}\033[0m\n"
-                f"> {typed}"
-            )
+            sys.stdout.write(f"\n\033[2m{self._TRANSCRIBE_HINT}\033[0m\n{line}")
         else:
-            sys.stdout.write(f"\r\033[K> {typed}")
-        # 커서를 cursor_pos 위치로 이동 (끝이 아닌 경우)
-        n = len(typed) - cursor_pos
-        if n > 0:
-            sys.stdout.write(f"\033[{n}D")
+            sys.stdout.write(f"\r\033[K{line}")
+        if after:
+            sys.stdout.write(f"\033[{len(after)}D")
         sys.stdout.flush()
 
     def show_transcribe_result(self, answer: str, user_input: str) -> None:
