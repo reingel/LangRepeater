@@ -513,12 +513,42 @@ class AppController:
                 self._play_current()
 
     def _handle_restart(self) -> None:
-        # S: restart segment from beginning
         self._refresh_display()
         if self._mode == "L":
             self._start_l_mode_playback()
+            return
+        siblings = self._get_split_siblings(self.current_index)
+        if len(siblings) > 1:
+            self._play_sentence_range(siblings)
         else:
             self._play_current()
+
+    def _get_split_siblings(self, pos: int) -> list[int]:
+        """index 구조 기반으로 동일 원본에서 분리된 형제 자막의 0-based 위치 목록 반환."""
+        sub_index = self.subtitles[pos].index
+        parts = sub_index.split('-')
+        if len(parts) < 2:
+            return [pos]
+        parent_prefix = '-'.join(parts[:-1]) + '-'
+        depth = len(parts)
+        result = [
+            i for i, sub in enumerate(self.subtitles)
+            if sub.index.startswith(parent_prefix) and len(sub.index.split('-')) == depth
+        ]
+        return result if len(result) > 1 else [pos]
+
+    def _play_sentence_range(self, siblings: list[int]) -> None:
+        """분리된 문장 전체(첫 형제 시작 ~ 마지막 형제 끝)를 재생. current_index는 유지."""
+        if self.player is None:
+            return
+        self._paused = False
+        start = self.subtitles[siblings[0]].start
+        end = self.subtitles[siblings[-1]].end
+        self._play_start_time = time.monotonic()
+        self._play_duration = end - start
+        self._was_playing = False
+        self.ui.update_animation_line(0.0)
+        self.player.play_segment(self.media_path, start, end, on_complete=None)
 
     def _handle_next(self) -> None:
         self._save_back()
@@ -1253,7 +1283,7 @@ class AppController:
                 self._play_current()
                 self.ui.show_transcribe_prompt(buf, len(buf), init=True)
                 self.ui.show_transcribe_result(sub.text, user_input)
-            elif ch in (b'\r', b'\n', b'c', b'C'):  # Enter / C → 종료
+            elif ch in (b'\r', b'\n', b't', b'T'):  # Enter / T → 종료
                 self._refresh_display()
                 return
             elif ch == b'\x1b':  # ESC 또는 escape sequence
