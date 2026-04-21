@@ -355,7 +355,7 @@ class RichUI:
             return text
         return words[0] + " " + " ".join(RichUI._mask_word(w) for w in words[1:-1]) + " " + words[-1]
 
-    def show_subtitles(self, subtitles: list[Subtitle], current_index: int, masked: bool = True, review_total: int | None = None, bookmarks: set[int] | None = None, title: str = "") -> None:
+    def show_subtitles(self, subtitles: list[Subtitle], current_index: int, masked: bool = True, review_total: int | None = None, bookmarks: set[int] | None = None, title: str = "", wrong_transcriptions: set[str] | None = None) -> None:
         n = len(subtitles)
         # determine which 3 to display
         if n == 0:
@@ -425,21 +425,23 @@ class RichUI:
         for idx in indices:
             sub = subtitles[idx]
             display_text = self._mask_text(sub.text) if masked else sub.text
-            bm_marker = "  *  " if (bookmarks and sub.index in bookmarks) else "     "
+            is_bm = bool(bookmarks and sub.index in bookmarks)
+            is_wt = bool(wrong_transcriptions and sub.index in wrong_transcriptions)
             before, after = _cut_markers(sub.text)
             num_str = f"{before + str(sub.index) + after:<6}"[:6]  # 6자 고정
             if idx == current_index:
                 ts = f"  [{sub.start:.2f}s ~ {sub.end:.2f}s]"
                 avail = line_width - prefix_len
                 chunks = _wrap(display_text, max(avail, 1), max(avail, 1))
-                # 첫 번째 줄: 텍스트를 avail 폭으로 패딩 후 타임스탬프를 고정 위치에 표시
                 line = Text()
                 line.append(num_str, style="bold cyan")
-                line.append(bm_marker, style="bold yellow")
+                line.append(" ")
+                line.append("*" if is_wt else " ", style="bold red")
+                line.append("*" if is_bm else " ", style="bold yellow")
+                line.append("  ")
                 line.append(f"{chunks[0]:<{avail}}", style="bold white")
                 line.append(ts, style="dim bold cyan")
                 console.print(line)
-                # 이후 줄: 타임스탬프 없이 텍스트만 표시
                 for chunk in chunks[1:]:
                     line = Text()
                     line.append(indent, style="")
@@ -448,8 +450,9 @@ class RichUI:
             else:
                 avail = line_width - prefix_len
                 chunks = _wrap(display_text, max(avail, 1), max(avail, 1))
-                bm_str = f"[dim bold yellow]{bm_marker}[/dim bold yellow]" if (bookmarks and sub.index in bookmarks) else bm_marker
-                console.print(f"[dim cyan]{num_str}[/dim cyan]{bm_str}[dim white]{chunks[0]}[/dim white]")
+                wt_str = "[dim bold red]*[/dim bold red]" if is_wt else " "
+                bm_str = "[dim bold yellow]*[/dim bold yellow]" if is_bm else " "
+                console.print(f"[dim cyan]{num_str}[/dim cyan] {wt_str}{bm_str}  [dim white]{chunks[0]}[/dim white]")
                 for chunk in chunks[1:]:
                     console.print(f"[dim white]{indent}{chunk}[/dim white]")
 
@@ -759,7 +762,7 @@ class RichUI:
             sys.stdout.write(f"\033[{len(after)}D")
         sys.stdout.flush()
 
-    def show_transcribe_result(self, answer: str, user_input: str) -> None:
+    def show_transcribe_result(self, answer: str, user_input: str) -> bool:
         """사용자 입력 줄을 그 자리에서 컬러로 업데이트: 틀린 단어는 적색.
 
         Sequence alignment via DP so that omitted/inserted words don't cause
@@ -827,6 +830,7 @@ class RichUI:
         if all_correct:
             line.append("  👍")
         console.print(line)
+        return all_correct
 
     def show_stats_header(self) -> None:
         """Stats screen header: program name + description + key bindings."""
@@ -845,6 +849,7 @@ class RichUI:
         current_sub_index: str = "",
         bookmarks: set[str] | None = None,
         cursor: int = -1,
+        wrong_transcriptions: set[str] | None = None,
     ) -> None:
         page_size = 10
         total = len(ranked)
@@ -856,18 +861,20 @@ class RichUI:
         for i, (idx, count) in enumerate(entries):
             abs_pos = start + i
             text = sub_map[idx].text if idx in sub_map else f"(subtitle {idx})"
-            bm = "  [yellow]*[/yellow]  " if (bookmarks and idx in bookmarks) else "     "
+            wt_char = "[red]*[/red]" if (wrong_transcriptions and idx in wrong_transcriptions) else " "
+            bm_char = "[yellow]*[/yellow]" if (bookmarks and idx in bookmarks) else " "
+            marker = f" {wt_char}{bm_char}  "
             play = "  [bold yellow]▶[/bold yellow]  " if idx == current_sub_index else "     "
             if abs_pos == cursor:
                 console.print(
                     "[bold]"
                     " [magenta]▶︎[/magenta] "
-                    f"[cyan]{idx:<5}[/cyan]{bm}[green]{count:>3}[/green]{play}[white]{text}[/white]"
+                    f"[cyan]{idx:<5}[/cyan]{marker}[green]{count:>3}[/green]{play}[white]{text}[/white]"
                     "[/bold]"
                 )
             else:
                 console.print(
-                    f"   [dim]{idx:<5}{bm}[green]{count:>3}[/green][/dim]{play}[dim]{text}[/dim]"
+                    f"   [dim]{idx:<5}[/dim]{marker}[dim][green]{count:>3}[/green][/dim]{play}[dim]{text}[/dim]"
                 )
         hours, rem = divmod(int(total_seconds), 3600)
         minutes, seconds = divmod(rem, 60)
@@ -924,6 +931,7 @@ class RichUI:
         cursor: int,
         current_sub_index: str = "",
         play_counts: dict[str, int] | None = None,
+        wrong_transcriptions: set[str] | None = None,
     ) -> None:
         """북마크 목록 화면: 10개씩 페이지, 커서 이동 가능."""
         page_size = 10
@@ -939,21 +947,22 @@ class RichUI:
         ))
         console.print(f"\n[bold cyan]── Bookmarks ──[/bold cyan]  [dim]({total} total)[/dim]\n")
         console.print(self._STATS_SEG_HEADER)
-        bm = "  [yellow]*[/yellow]  "
         for i, sub_idx in enumerate(entries):
             abs_pos = start + i
             text = sub_map[sub_idx].text if sub_idx in sub_map else f"(subtitle {sub_idx})"
             count = (play_counts or {}).get(sub_idx, 0)
+            wt_char = "[red]*[/red]" if (wrong_transcriptions and sub_idx in wrong_transcriptions) else " "
+            marker = f" {wt_char}[yellow]*[/yellow]  "
             play = "  [bold yellow]▶[/bold yellow]  " if sub_idx == current_sub_index else "     "
             if abs_pos == cursor:
                 console.print(
                     "[bold]"
                     " [magenta]▶︎[/magenta] "
-                    f"[cyan]{sub_idx:<5}[/cyan]{bm}[green]{count:>3}[/green]{play}[white]{text}[/white]"
+                    f"[cyan]{sub_idx:<5}[/cyan]{marker}[green]{count:>3}[/green]{play}[white]{text}[/white]"
                     "[/bold]"
                 )
             else:
-                console.print(f"   [dim]{sub_idx:<5}{bm}[green]{count:>3}[/green][/dim]{play}[dim]{text}[/dim]")
+                console.print(f"   [dim]{sub_idx:<5}[/dim]{marker}[dim][green]{count:>3}[/green][/dim]{play}[dim]{text}[/dim]")
         console.print(f"\n[dim]Page {page + 1}/{page_count}[/dim]")
 
     def show_stats(self, total_play: int, subtitle_index: int, subtitle_play: int) -> None:

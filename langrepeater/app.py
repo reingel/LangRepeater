@@ -66,7 +66,8 @@ class AppController:
         self._review_lr_return_index: int = 0  # R모드 → LR모드 복귀 시 돌아갈 인덱스
         self._back_index: int = -1  # BACK 키 복귀용 이전 자막 인덱스 (-1 = 없음)
         self._back_review_index: int = 0  # R모드 BACK 키 복귀용 이전 review_index
-        self._bookmarks: set[int] = set()  # 현재 미디어의 북마크된 1-based 자막 인덱스
+        self._bookmarks: set[str] = set()  # 현재 미디어의 북마크된 자막 인덱스
+        self._wrong_transcriptions: set[str] = set()  # 틀린 받아쓰기 자막 인덱스
         self._showing_bookmarks: bool = False
         self._bookmark_page: int = 0
         self._bookmark_cursor: int = 0  # 북마크 목록 내 절대 커서 위치
@@ -259,6 +260,7 @@ class AppController:
         self.subtitles = self.srt_parser.load(self.srt_path)
         self.all_word_timestamps = self.srt_parser.load_words_json(self.srt_path) or self.srt_parser.load_words_yaml(self.srt_path)
         self._bookmarks = self.bookmark_store.load(self.media_path)
+        self._wrong_transcriptions = self.bookmark_store.load_wrong(self.media_path)
         # total_segments를 즉시 저장하여 세션 목록에 반영
         self.progress_store.upsert(Session(
             media_path=self.media_path,
@@ -880,6 +882,7 @@ class AppController:
         self.stats_store.remap_indices(self.media_path, remap)
         self.bookmark_store.remap_indices(self.media_path, bm_remap)
         self._bookmarks = self.bookmark_store.load(self.media_path)
+        self._wrong_transcriptions = self.bookmark_store.load_wrong(self.media_path)
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
         self._play_current()
@@ -943,6 +946,7 @@ class AppController:
         self.stats_store.remap_indices(self.media_path, remap)
         self.bookmark_store.remap_indices(self.media_path, bm_remap)
         self._bookmarks = self.bookmark_store.load(self.media_path)
+        self._wrong_transcriptions = self.bookmark_store.load_wrong(self.media_path)
         self.srt_parser.save(self.srt_path, self.subtitles)
         self._refresh_display()
         self._play_current()
@@ -1290,7 +1294,12 @@ class AppController:
         if not user_input:
             self._refresh_display()
             return
-        self.ui.show_transcribe_result(sub.text, user_input)
+        is_correct = self.ui.show_transcribe_result(sub.text, user_input)
+        if is_correct:
+            self.bookmark_store.remove_wrong(self.media_path, sub.index)
+        else:
+            self.bookmark_store.add_wrong(self.media_path, sub.index)
+        self._wrong_transcriptions = self.bookmark_store.load_wrong(self.media_path)
 
         # 결과 표시 후 Tab(재생), Opt+V(자막 토글), 이동 처리 루프
         def _nav_prev():
@@ -1378,9 +1387,9 @@ class AppController:
             sub.index = str(i + 1)
 
     def _heal_stale_bookmarks(self) -> None:
-        """북마크 인덱스가 현재 자막 목록에 없으면 분리된 첫 번째 자막으로 자동 보정."""
+        """북마크/틀린받아쓰기 인덱스가 현재 자막 목록에 없으면 분리된 첫 번째 자막으로 자동 보정."""
         sub_map = {sub.index: sub for sub in self.subtitles}
-        stale = {idx for idx in self._bookmarks if idx not in sub_map}
+        stale = {idx for idx in self._bookmarks | self._wrong_transcriptions if idx not in sub_map}
         if not stale:
             return
         remap = {}
@@ -1392,6 +1401,7 @@ class AppController:
         if remap:
             self.bookmark_store.remap_indices(self.media_path, remap)
             self._bookmarks = self.bookmark_store.load(self.media_path)
+            self._wrong_transcriptions = self.bookmark_store.load_wrong(self.media_path)
 
     def _reindex_after(self, start_pos: int, start_num: int) -> dict[str, str]:
         """start_pos 이후 자막의 앞 번호(base)를 start_num부터 재지정. suffix(-1/-2/...)는 유지.
@@ -1423,16 +1433,17 @@ class AppController:
         sub_index = self.subtitles[self.current_index].index
         self.bookmark_store.toggle(self.media_path, sub_index)
         self._bookmarks = self.bookmark_store.load(self.media_path)
+        self._wrong_transcriptions = self.bookmark_store.load_wrong(self.media_path)
         self._refresh_display()
 
     def _handle_bookmark_list(self) -> None:
         if not self.subtitles:
             return
         self._heal_stale_bookmarks()
-        bookmark_indices = sorted(self._bookmarks, key=_index_key)
+        bookmark_indices = sorted(self._bookmarks | self._wrong_transcriptions, key=_index_key)
         if not bookmark_indices:
             self._refresh_display()
-            self.ui.show_message("[dim]No bookmarks yet. Press B to add one.[/dim]")
+            self.ui.show_message("[dim]No bookmarks or wrong transcriptions yet.[/dim]")
             return
         sub_map = {sub.index: sub for sub in self.subtitles}
         play_counts = self.stats_store.load(self.media_path).subtitle_play_counts
@@ -1444,10 +1455,11 @@ class AppController:
         self._showing_bookmarks = True
         self.ui.clear()
         self.ui.show_bookmark_list(bookmark_indices, sub_map, self._bookmark_page, self._bookmark_cursor,
-                                    current_sub_index=current_sub_index, play_counts=play_counts)
+                                    current_sub_index=current_sub_index, play_counts=play_counts,
+                                    wrong_transcriptions=self._wrong_transcriptions)
 
     def _handle_bookmark_cursor(self, direction: int) -> None:
-        bookmark_indices = sorted(self._bookmarks, key=_index_key)
+        bookmark_indices = sorted(self._bookmarks | self._wrong_transcriptions, key=_index_key)
         if not bookmark_indices:
             return
         self._bookmark_cursor = max(0, min(len(bookmark_indices) - 1, self._bookmark_cursor + direction))
@@ -1457,10 +1469,11 @@ class AppController:
         self.ui.clear()
         self.ui.show_bookmark_list(bookmark_indices, sub_map, self._bookmark_page, self._bookmark_cursor,
                                     current_sub_index=self.subtitles[self.current_index].index,
-                                    play_counts=play_counts)
+                                    play_counts=play_counts,
+                                    wrong_transcriptions=self._wrong_transcriptions)
 
     def _handle_bookmark_page(self, direction: int) -> None:
-        bookmark_indices = sorted(self._bookmarks, key=_index_key)
+        bookmark_indices = sorted(self._bookmarks | self._wrong_transcriptions, key=_index_key)
         if not bookmark_indices:
             return
         page_count = max(1, -(-len(bookmark_indices) // 10))
@@ -1478,11 +1491,12 @@ class AppController:
         self.ui.clear()
         self.ui.show_bookmark_list(bookmark_indices, sub_map, self._bookmark_page, self._bookmark_cursor,
                                     current_sub_index=self.subtitles[self.current_index].index,
-                                    play_counts=play_counts)
+                                    play_counts=play_counts,
+                                    wrong_transcriptions=self._wrong_transcriptions)
 
     def _handle_bookmark_select(self) -> None:
         """Enter: 선택한 북마크 구간으로 이동하고 LR모드로 복귀."""
-        bookmark_indices = sorted(self._bookmarks, key=_index_key)
+        bookmark_indices = sorted(self._bookmarks | self._wrong_transcriptions, key=_index_key)
         if not bookmark_indices or self._bookmark_cursor >= len(bookmark_indices):
             self._showing_bookmarks = False
             self._refresh_display()
@@ -1518,6 +1532,7 @@ class AppController:
             current_sub_index=self.subtitles[self.current_index].index,
             bookmarks=self._bookmarks,
             cursor=self._stats_cursor,
+            wrong_transcriptions=self._wrong_transcriptions,
         )
 
     def _handle_stats_select(self) -> None:
@@ -1571,6 +1586,7 @@ class AppController:
             current_sub_index=current_sub_index,
             bookmarks=self._bookmarks,
             cursor=self._stats_cursor,
+            wrong_transcriptions=self._wrong_transcriptions,
         )
 
     def _handle_print_date_stats(self) -> None:
@@ -1624,6 +1640,7 @@ class AppController:
             current_sub_index=self.subtitles[self.current_index].index,
             bookmarks=self._bookmarks,
             cursor=self._stats_cursor,
+            wrong_transcriptions=self._wrong_transcriptions,
         )
 
     def _refresh_display(self) -> None:
@@ -1632,9 +1649,9 @@ class AppController:
         title = Path(self.media_path).stem if self.media_path else ""
         if self._mode == "R" and self._review_list:
             review_subs = [self.subtitles[i] for i in self._review_list]
-            self.ui.show_subtitles(review_subs, self._review_index, masked=self._subtitle_masked, review_total=len(self._review_list), bookmarks=self._bookmarks, title=title)
+            self.ui.show_subtitles(review_subs, self._review_index, masked=self._subtitle_masked, review_total=len(self._review_list), bookmarks=self._bookmarks, title=title, wrong_transcriptions=self._wrong_transcriptions)
         else:
-            self.ui.show_subtitles(self.subtitles, self.current_index, masked=self._subtitle_masked, bookmarks=self._bookmarks, title=title)
+            self.ui.show_subtitles(self.subtitles, self.current_index, masked=self._subtitle_masked, bookmarks=self._bookmarks, title=title, wrong_transcriptions=self._wrong_transcriptions)
         if self.player and self.player.is_playing() and self._play_duration > 0:
             elapsed = time.monotonic() - self._play_start_time
             progress = min(1.0, elapsed / self._play_duration)
