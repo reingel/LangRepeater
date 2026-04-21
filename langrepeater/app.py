@@ -915,13 +915,28 @@ class AppController:
         text_a = sub.text[:split_pos].rstrip()
         text_b = sub.text[split_pos:].lstrip()
         split_time = round(self._split_time_from_word_timestamps(sub, split_pos), 3)
-        idx_a, idx_b = _split_indices(orig_idx)
+        parts = orig_idx.split('-')
+        base_int = _index_key(orig_idx)[0]
+        sentence_end = bool(text_a) and text_a[-1] in self._SENTENCE_END_PUNCT
+        if sentence_end:
+            # 문장 종료: 첫 번째 인덱스 유지, 두 번째 = 다음 정수, 후속 +1 shift
+            idx_a = orig_idx
+            idx_b = str(base_int + 1)
+            reindex_start_num = base_int + 2
+        elif len(parts) >= 2:
+            # 문장 중간 + suffix 인덱스: 끝 번호 증가, shift 없음
+            idx_a = orig_idx
+            idx_b = '-'.join(parts[:-1]) + '-' + str(int(parts[-1]) + 1)
+            reindex_start_num = base_int + 1
+        else:
+            # 문장 중간 + plain integer: 기존 -1/-2 동작
+            idx_a, idx_b = _split_indices(orig_idx)
+            reindex_start_num = base_int + 1
         sub_a = Subtitle(index=idx_a, start=sub.start, end=split_time, text=text_a)
         sub_b = Subtitle(index=idx_b, start=split_time, end=sub.end, text=text_b)
         self.subtitles[self.current_index:self.current_index + 1] = [sub_a, sub_b]
         self.stats_store.on_split(self.media_path, orig_idx, idx_a, idx_b)
-        # 스플릿 후 뒤 항목 순번을 orig_idx 다음부터 순차 재지정 (45-1, 45-2는 유지)
-        remap = self._reindex_after(self.current_index + 2, _index_key(orig_idx)[0] + 1)
+        remap = self._reindex_after(self.current_index + 2, reindex_start_num)
         # 북마크: 원본 항목 북마크 → 첫 번째 분리 항목으로 이동
         bm_remap = dict(remap)
         bm_remap[orig_idx] = idx_a
@@ -1379,11 +1394,24 @@ class AppController:
             self._bookmarks = self.bookmark_store.load(self.media_path)
 
     def _reindex_after(self, start_pos: int, start_num: int) -> dict[str, str]:
-        """start_pos 이후 자막을 start_num부터 순차 재지정. old→new 리맵 반환."""
+        """start_pos 이후 자막의 앞 번호(base)를 start_num부터 재지정. suffix(-1/-2/...)는 유지.
+
+        base 번호가 바뀔 때만 카운터를 증가시켜 동일 base의 suffix 항목들을 같은 번호로 묶는다.
+        예: [383-1, 383-2, 384] → start_num=382 → [382-1, 382-2, 383]
+        """
         remap: dict[str, str] = {}
+        new_base = start_num
+        prev_old_base: str | None = None
         for i in range(start_pos, len(self.subtitles)):
             old_idx = self.subtitles[i].index
-            new_idx = str(start_num + (i - start_pos))
+            parts = old_idx.split('-')
+            old_base = parts[0]
+            suffix = parts[1:]
+            if old_base != prev_old_base:
+                if prev_old_base is not None:
+                    new_base += 1
+                prev_old_base = old_base
+            new_idx = '-'.join([str(new_base)] + suffix)
             if old_idx != new_idx:
                 remap[old_idx] = new_idx
                 self.subtitles[i].index = new_idx
