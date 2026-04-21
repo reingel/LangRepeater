@@ -1350,11 +1350,11 @@ class AppController:
                     self.ui.show_transcribe_prompt(buf, len(buf), init=True)
                     self.ui.show_transcribe_result(sub.text, user_input)
                 # 그 외 escape sequence → 무시
-            elif ch in (b'a', b'A'):  # A → 이전
+            elif ch in (b'a', b'A', b'k', b'K'):  # A/K → 이전
                 self._refresh_display()
                 _nav_prev()
                 return
-            elif ch in (b'd', b'D'):  # D → 다음
+            elif ch in (b'd', b'D', b'j', b'J'):  # D/J → 다음
                 self._refresh_display()
                 _nav_next()
                 return
