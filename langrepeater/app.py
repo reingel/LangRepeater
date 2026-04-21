@@ -71,6 +71,7 @@ class AppController:
         self._bookmark_page: int = 0
         self._bookmark_cursor: int = 0  # 북마크 목록 내 절대 커서 위치
         self._stats_cursor: int = 0  # 통계 화면 내 절대 커서 위치
+        self._sentence_play_origin: int = -1  # S키 문장 전체 재생 중 복귀할 원래 인덱스 (-1 = 비활성)
 
     def run(self) -> None:
         while True:
@@ -293,6 +294,25 @@ class AppController:
                 if action is None:
                     if not self._showing_stats and not self._showing_date_stats and not self._showing_bookmarks:
                         is_playing = self.player is not None and self.player.is_playing()
+                        if self._sentence_play_origin >= 0 and self.subtitles:
+                            if is_playing:
+                                pos = self.player.get_position()
+                                new_index = self._find_subtitle_index_by_pos(pos)
+                                if new_index != self.current_index:
+                                    self.current_index = new_index
+                                    self._refresh_display()
+                                sub = self.subtitles[self.current_index]
+                                duration = sub.end - sub.start
+                                if duration > 0:
+                                    progress = min(1.0, max(0.0, (pos - sub.start) / duration))
+                                    self.ui.update_animation_line(progress)
+                            elif self._was_playing and not self._paused:
+                                self.current_index = self._sentence_play_origin
+                                self._sentence_play_origin = -1
+                                self._refresh_display()
+                                self.ui.update_animation_line(1.0, dim=True)
+                            self._was_playing = is_playing
+                            continue
                         if self._mode == "L" and self.subtitles:
                             if is_playing:
                                 pos = self.player.get_position()
@@ -538,10 +558,13 @@ class AppController:
         return result if len(result) > 1 else [pos]
 
     def _play_sentence_range(self, siblings: list[int]) -> None:
-        """분리된 문장 전체(첫 형제 시작 ~ 마지막 형제 끝)를 재생. current_index는 유지."""
+        """분리된 문장 전체(첫 형제 시작 ~ 마지막 형제 끝)를 재생. 완료 후 current_index 복귀."""
         if self.player is None:
             return
+        self._sentence_play_origin = self.current_index
         self._paused = False
+        self.current_index = siblings[0]
+        self._refresh_display()
         start = self.subtitles[siblings[0]].start
         end = self.subtitles[siblings[-1]].end
         self._play_start_time = time.monotonic()
