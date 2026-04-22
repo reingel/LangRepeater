@@ -1339,6 +1339,9 @@ class AppController:
             elif ch in (b'\r', b'\n', b't', b'T'):  # Enter / T → 종료
                 self._refresh_display()
                 return
+            elif ch in (b'q', b'Q'):  # Q → 앱 종료
+                self._handle_quit()
+                sys.exit(0)
             elif ch == b'\x1b':  # ESC 또는 escape sequence
                 rlist2, _, _ = select.select([self._fd], [], [], 0.05)
                 if not rlist2:
