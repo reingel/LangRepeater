@@ -223,11 +223,13 @@ class SRTParser:
 
         sentences: list[list[WordTimestamp]] = []
         current: list[WordTimestamp] = []
-        for wt in all_wts:
+        for i, wt in enumerate(all_wts):
             current.append(wt)
-            if re.search(r'[.?!]\s*$', wt.word) and wt.word.strip() not in _ABBREVIATIONS:
-                sentences.append(current)
-                current = []
+            if re.search(r'[.?!]\s*$', wt.word):
+                next_wt = all_wts[i + 1] if i + 1 < len(all_wts) else None
+                if next_wt is None or (next_wt.word and next_wt.word[0].isupper()):
+                    sentences.append(current)
+                    current = []
         if current:
             sentences.append(current)
 
