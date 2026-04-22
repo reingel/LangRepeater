@@ -77,6 +77,7 @@ class RichUI:
     ]
 
     _HELP_TEXT_STATS = "[dim]↑/↓: move  |  Enter: go  |  [ ]: prev/next page  |  any key: back[/dim]"
+    _HELP_TEXT_DATE_STATS = "[dim]↑/↓: move  |  [ ]: prev/next page  |  any key: back[/dim]"
 
     # ── 메뉴 힌트 ─────────────────────────────────────────────────────────────
     _HINT_MENU     = "[dim]↑/↓: move  |  Enter: select  |  ESC: back[/dim]"
@@ -839,6 +840,13 @@ class RichUI:
             expand=False,
         ))
 
+    def show_date_stats_header(self) -> None:
+        """Date stats screen header: program name + description + key bindings."""
+        console.print(Panel(
+            self._HEADER_TEXT + "\n\n" + self._HELP_TEXT_DATE_STATS,
+            expand=False,
+        ))
+
     def show_learning_stats(
         self,
         ranked: list[tuple[str, int]],
@@ -887,10 +895,9 @@ class RichUI:
         sub_map: dict[str, Subtitle],
         page: int,
         progress_pct: float = 0.0,
+        cursor: int = 0,
     ) -> None:
-        from datetime import date as _date
-
-        page_size = 10
+        page_size = 3
         total = len(entries)
         start = page * page_size
         end = min(start + page_size, total)
@@ -906,10 +913,11 @@ class RichUI:
 
         all_seconds = [_day_seconds(sc) for _, sc in entries]
         max_seconds = max(all_seconds) if all_seconds else 1.0
-        today_str = _date.today().strftime("%Y-%m-%d")
+
+        date_colors = ["cyan", "yellow", "green", "magenta", "blue", "red"]
 
         console.print(self._STATS_DATE_HEADER)
-        for date_str, sc in page_entries:
+        for i, (date_str, sc) in enumerate(page_entries):
             subtitle_count = len(sc)
             repeat_count = sum(sc.values())
             total_seconds = _day_seconds(sc)
@@ -918,10 +926,135 @@ class RichUI:
             time_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
             filled = round(total_seconds / max_seconds * 20) if max_seconds > 0 else 0
             bar = "█" * filled + "░" * (20 - filled)
-            marker = "[yellow]▶[/yellow]" if date_str == today_str else " "
-            console.print(f"{marker} [cyan]{date_str}[/cyan][white]  {subtitle_count:>6}   {repeat_count:>6}     {time_str:>11}  {bar}")
+            marker = "[magenta]▶[/magenta]" if i == cursor else " "
+            color = date_colors[(page * page_size + i) % len(date_colors)]
+            console.print(f"{marker} [{color}]{date_str}[/{color}][white]  {subtitle_count:>6}   {repeat_count:>6}     {time_str:>11}  {bar}")
+
         page_count = max(1, -(-total // page_size))
         console.print(f"\n[dim]Page {page + 1}/{page_count}[/dim]")
+
+        cursor_abs = page * page_size + cursor
+        self._render_date_bar_graph(entries, sub_map, cursor_abs)
+
+    def _render_date_bar_graph(
+        self,
+        all_entries: list[tuple[str, dict[str, int]]],
+        sub_map: dict[str, Subtitle],
+        cursor_abs: int,
+    ) -> None:
+        graph_height = 5
+        # Date row width: 1(marker)+1(sp)+10(date)+2+6+3+6+5+11+2+20(bar) = 67
+        DATE_ROW_WIDTH = 67
+        Y_PREFIX = 2  # "5│"
+        graph_max_width = min(DATE_ROW_WIDTH, console.width) - Y_PREFIX
+        # Each bar col = 1 char + 1 space; last col no trailing space: 2*N-1 <= width
+        max_bars = (graph_max_width + 1) // 2
+
+        all_sub_indices = list(sub_map.keys())
+        total_subs = len(all_sub_indices)
+        if total_subs == 0:
+            return
+
+        num_cols = min(total_subs, max_bars)
+
+        col_counts: list[list[int]] = []
+        for col in range(num_cols):
+            sub_start = col * total_subs // num_cols
+            sub_end = (col + 1) * total_subs // num_cols
+            if sub_end <= sub_start:
+                sub_end = sub_start + 1
+            bin_set = set(all_sub_indices[sub_start:sub_end])
+            col_counts.append([
+                sum(sc.get(idx, 0) for idx in bin_set)
+                for _, sc in all_entries
+            ])
+
+        max_count = max((max(c) for c in col_counts if c), default=1) or 1
+
+        col_heights = [
+            [round(c / max_count * graph_height) for c in counts]
+            for counts in col_counts
+        ]
+
+        date_colors = ["cyan", "yellow", "green", "magenta", "blue", "red"]
+        bright_rgb = {
+            "cyan":    "on rgb(0,220,220)",
+            "yellow":  "on rgb(220,200,0)",
+            "green":   "on rgb(0,210,0)",
+            "magenta": "on rgb(210,0,210)",
+            "blue":    "on rgb(40,120,255)",
+            "red":     "on rgb(220,60,60)",
+        }
+        dim_rgb = {
+            "cyan":    "on rgb(0,50,60)",
+            "yellow":  "on rgb(50,45,0)",
+            "green":   "on rgb(0,55,0)",
+            "magenta": "on rgb(55,0,55)",
+            "blue":    "on rgb(0,0,80)",
+            "red":     "on rgb(60,0,0)",
+        }
+
+        axis_len = 2 * num_cols - 1
+
+        console.print()
+        for row in range(graph_height, 0, -1):
+            parts: list[str] = [" │"]
+            for col in range(num_cols):
+                heights = col_heights[col]
+                if cursor_abs < len(heights) and heights[cursor_abs] >= row:
+                    color = date_colors[cursor_abs % len(date_colors)]
+                    bg = bright_rgb[color]
+                    parts.append(f"[{bg}] [/]")
+                else:
+                    found = False
+                    for j, h in enumerate(heights):
+                        if j != cursor_abs and h >= row:
+                            color = date_colors[j % len(date_colors)]
+                            bg = dim_rgb[color]
+                            parts.append(f"[{bg}] [/]")
+                            found = True
+                            break
+                    if not found:
+                        parts.append(" ")
+                if col < num_cols - 1:
+                    parts.append(" ")
+            console.print("".join(parts))
+
+        # X-axis line
+        console.print(f" └{'─' * axis_len}")
+
+        # X-axis labels: first, middle, last
+        first_label = "1"
+        last_label = str(total_subs)
+        mid_sub_idx = (total_subs - 1) // 2
+        mid_label = str(mid_sub_idx + 1)
+
+        # Bar col → char position in output (col*2 due to spacing)
+        last_bar_pos = (num_cols - 1) * 2
+        mid_col = mid_sub_idx * (num_cols - 1) // max(total_subs - 1, 1)
+        mid_bar_pos = mid_col * 2
+
+        label_chars = [" "] * axis_len
+
+        for i, c in enumerate(first_label):
+            if i < axis_len:
+                label_chars[i] = c
+
+        last_start = max(0, last_bar_pos - len(last_label) + 1)
+        for i, c in enumerate(last_label):
+            pos = last_start + i
+            if pos < axis_len:
+                label_chars[pos] = c
+
+        mid_start = mid_bar_pos - len(mid_label) // 2
+        mid_start = max(len(first_label) + 1, mid_start)
+        mid_start = min(last_start - len(mid_label) - 1, mid_start)
+        for i, c in enumerate(mid_label):
+            pos = mid_start + i
+            if 0 <= pos < axis_len:
+                label_chars[pos] = c
+
+        console.print("  " + "".join(label_chars))
 
     def show_bookmark_list(
         self,
