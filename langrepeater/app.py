@@ -1303,6 +1303,9 @@ class AppController:
         else:
             self.bookmark_store.add_wrong(self.media_path, sub.index)
         self._wrong_transcriptions = self.bookmark_store.load_wrong(self.media_path)
+        self._refresh_display()
+        self.ui.show_transcribe_prompt(buf, len(buf), init=True)
+        self.ui.show_transcribe_result(sub.text, user_input)
 
         # 결과 표시 후 Tab(재생), Opt+V(자막 토글), 이동 처리 루프
         def _nav_prev():

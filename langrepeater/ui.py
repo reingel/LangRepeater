@@ -822,8 +822,8 @@ class RichUI:
                 j -= 1
         aligned.reverse()
 
-        line = Text("> ")
         all_correct = all(s == "bold green" for _, s in aligned) and bool(aligned) and len(input_words) == n
+        line = Text("> ")
         for k, (word, style) in enumerate(aligned):
             if k > 0:
                 line.append(" ")
