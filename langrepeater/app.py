@@ -54,6 +54,7 @@ class AppController:
         self._showing_date_stats: bool = False
         self._date_stats_entries: list[tuple[str, dict[int, int]]] = []
         self._date_stats_page: int = 0
+        self._date_stats_cursor: int = 0
         self._play_start_time: float = 0.0
         self._play_duration: float = 0.0
         self._paused_at: float = 0.0
@@ -364,6 +365,8 @@ class AppController:
                         self._handle_stats_page(1 if action == Action.STATS_NEXT else -1)
                     elif action in (Action.NEXT, Action.PREV) and self._showing_stats:
                         self._handle_stats_cursor(1 if action == Action.NEXT else -1)
+                    elif action in (Action.NEXT, Action.PREV) and self._showing_date_stats:
+                        self._handle_date_stats_cursor(1 if action == Action.NEXT else -1)
                     elif action == Action.BOOKMARK_SELECT and self._showing_stats:
                         self._handle_stats_select()
                     elif action == Action.PRINT_STATS and self._showing_stats:
@@ -1589,6 +1592,40 @@ class AppController:
             wrong_transcriptions=self._wrong_transcriptions,
         )
 
+    def _handle_date_stats_cursor(self, direction: int) -> None:
+        page_size = 3
+        total = len(self._date_stats_entries)
+        page_count = max(1, -(-total // page_size))
+        current_page_size = min(page_size, total - self._date_stats_page * page_size)
+
+        new_cursor = self._date_stats_cursor + direction
+
+        if new_cursor < 0:
+            if self._date_stats_page > 0:
+                self._date_stats_page -= 1
+                prev_size = min(page_size, total - self._date_stats_page * page_size)
+                self._date_stats_cursor = prev_size - 1
+            else:
+                self.ui.show_message("[red]This is the first date.[/red]")
+                return
+        elif new_cursor >= current_page_size:
+            if self._date_stats_page < page_count - 1:
+                self._date_stats_page += 1
+                self._date_stats_cursor = 0
+            else:
+                self.ui.show_message("[red]This is the last date.[/red]")
+                return
+        else:
+            self._date_stats_cursor = new_cursor
+
+        progress_pct = (self.current_index + 1) / len(self.subtitles) * 100
+        self.ui.clear()
+        self.ui.show_date_stats_header()
+        self.ui.show_date_stats(
+            self._date_stats_entries, self._stats_sub_map,
+            self._date_stats_page, progress_pct, cursor=self._date_stats_cursor,
+        )
+
     def _handle_print_date_stats(self) -> None:
         if not self.subtitles:
             return
@@ -1596,16 +1633,20 @@ class AppController:
         self._stats_sub_map = sub_map
         self._date_stats_entries = self.stats_store.load_date_stats(self.media_path)
         self._date_stats_page = 0
+        self._date_stats_cursor = 0
         progress_pct = (self.current_index + 1) / len(self.subtitles) * 100
         self.ui.clear()
-        self.ui.show_stats_header()
-        self.ui.show_date_stats(self._date_stats_entries, sub_map, self._date_stats_page, progress_pct)
+        self.ui.show_date_stats_header()
+        self.ui.show_date_stats(
+            self._date_stats_entries, sub_map, self._date_stats_page, progress_pct,
+            cursor=self._date_stats_cursor,
+        )
 
     def _handle_stats_page(self, direction: int) -> None:
         progress_pct = (self.current_index + 1) / len(self.subtitles) * 100
         if self._showing_date_stats:
             total = len(self._date_stats_entries)
-            page_count = max(1, -(-total // 10))
+            page_count = max(1, -(-total // 3))
             new_page = self._date_stats_page + direction
             if new_page < 0:
                 self.ui.show_message("[red]This is the first page.[/red]")
@@ -1614,10 +1655,12 @@ class AppController:
                 self.ui.show_message("[red]This is the last page.[/red]")
                 return
             self._date_stats_page = new_page
+            self._date_stats_cursor = 0
             self.ui.clear()
-            self.ui.show_stats_header()
+            self.ui.show_date_stats_header()
             self.ui.show_date_stats(
                 self._date_stats_entries, self._stats_sub_map, self._date_stats_page, progress_pct,
+                cursor=self._date_stats_cursor,
             )
             return
         if not self._stats_ranked:
