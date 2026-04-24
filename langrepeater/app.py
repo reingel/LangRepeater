@@ -1696,7 +1696,7 @@ class AppController:
         self.ui.clear()
         self.ui.show_study_header(self._mode)
         title = Path(self.media_path).stem if self.media_path else ""
-        if self._mode == "R" and self._review_list:
+        if self._mode == "R" and self._review_list and self._sentence_play_origin < 0:
             review_subs = [self.subtitles[i] for i in self._review_list]
             self.ui.show_subtitles(review_subs, self._review_index, masked=self._subtitle_masked, review_total=len(self._review_list), bookmarks=self._bookmarks, title=title, wrong_transcriptions=self._wrong_transcriptions)
         else:
