@@ -72,8 +72,8 @@ class RichUI:
         ("0", "bookmark list", "010"),
     ]
     _HELP_SETTING: list[tuple] = [
-        (";", "sibilant down", "111"),
-        ("'", "sibilant up",   "111"),
+        (";", "sibilant down", "110"),
+        ("'", "sibilant up",   "110"),
     ]
 
     _HELP_TEXT_STATS = "[dim]↑/↓: move  |  Enter: go  |  [ ]: prev/next page  |  any key: back[/dim]"
@@ -361,6 +361,7 @@ class RichUI:
         # determine which 3 to display
         if n == 0:
             return
+        current_index = max(0, min(n - 1, current_index))
         if n == 1:
             indices = [0]
         elif n == 2:

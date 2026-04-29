@@ -262,6 +262,8 @@ class AppController:
         self.all_word_timestamps = self.srt_parser.load_words_json(self.srt_path) or self.srt_parser.load_words_yaml(self.srt_path)
         self._bookmarks = self.bookmark_store.load(self.media_path)
         self._wrong_transcriptions = self.bookmark_store.load_wrong(self.media_path)
+        if self.subtitles:
+            self.current_index = max(0, min(len(self.subtitles) - 1, self.current_index))
         # total_segments를 즉시 저장하여 세션 목록에 반영
         self.progress_store.upsert(Session(
             media_path=self.media_path,
