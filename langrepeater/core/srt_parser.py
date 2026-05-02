@@ -27,6 +27,109 @@ def _load_abbreviations() -> set[str]:
 _CAPITAL_LETTERS: set[str] = _load_capital_letters()
 _ABBREVIATIONS: set[str] = _load_abbreviations()
 
+_nlp: object = None
+_nlp_loaded: bool = False
+
+
+def _get_nlp():
+    global _nlp, _nlp_loaded
+    if not _nlp_loaded:
+        _nlp_loaded = True
+        try:
+            import spacy
+            _nlp = spacy.load("en_core_web_sm")
+        except Exception:
+            _nlp = None
+    return _nlp
+
+
+def _split_sentences_spacy(all_wts: list, nlp) -> list:
+    words = [wt.word for wt in all_wts]
+    full_text = " ".join(words)
+    # char offset → word index
+    word_starts: list[int] = []
+    char_to_word: dict[int, int] = {}
+    pos = 0
+    for i, word in enumerate(words):
+        word_starts.append(pos)
+        char_to_word[pos] = i
+        pos += len(word) + 1
+    doc = nlp(full_text)
+    # collect word indices that start a new sentence
+    sent_break_word_indices: set[int] = set()
+    for sent in doc.sents:
+        wt_idx = char_to_word.get(sent.start_char)
+        if wt_idx is not None:
+            sent_break_word_indices.add(wt_idx)
+        else:
+            # sent.start_char lands mid-word (spaCy split punctuation off);
+            # find the word whose char span contains this position
+            import bisect
+            idx = bisect.bisect_right(word_starts, sent.start_char) - 1
+            if 0 <= idx < len(words):
+                sent_break_word_indices.add(idx)
+    sentences: list = []
+    current: list = []
+    for i, wt in enumerate(all_wts):
+        if i > 0 and i in sent_break_word_indices:
+            if current:
+                sentences.append(current)
+            current = []
+        current.append(wt)
+    if current:
+        sentences.append(current)
+    return sentences
+
+
+def _split_sentences_heuristic(all_wts: list) -> list:
+    sentences: list = []
+    current: list = []
+    for i, wt in enumerate(all_wts):
+        current.append(wt)
+        if re.search(r'[.?!]\s*$', wt.word):
+            next_wt = all_wts[i + 1] if i + 1 < len(all_wts) else None
+            if next_wt is None or (next_wt.word and next_wt.word[0].isupper()):
+                sentences.append(current)
+                current = []
+    if current:
+        sentences.append(current)
+    return sentences
+
+
+def _split_sentences_by_timing(all_wts: list, gap_threshold: float = 0.4, min_words: int = 5, max_words: int = 50) -> list:
+    """Split on inter-word pauses when no punctuation is available."""
+    if not all_wts:
+        return []
+    sentences: list = []
+    current: list = []
+    for i, wt in enumerate(all_wts):
+        current.append(wt)
+        is_last = i == len(all_wts) - 1
+        if is_last:
+            sentences.append(current)
+            break
+        gap = all_wts[i + 1].start - wt.end
+        if (gap >= gap_threshold and len(current) >= min_words) or len(current) >= max_words:
+            sentences.append(current)
+            current = []
+    return sentences
+
+
+def _split_sentences(all_wts: list) -> list:
+    _ENOUGH = max(2, len(all_wts) // 40)
+
+    result = _split_sentences_heuristic(all_wts)
+    if len(result) >= _ENOUGH:
+        return result
+
+    nlp = _get_nlp()
+    if nlp is not None:
+        spacy_result = _split_sentences_spacy(all_wts, nlp)
+        if len(spacy_result) >= _ENOUGH:
+            return spacy_result
+
+    return _split_sentences_by_timing(all_wts)
+
 
 def _strip_font_tags(text: str) -> str:
     """Remove <font ...>...</font> tags, keeping inner text."""
@@ -120,6 +223,7 @@ def _parse_srt_blocks(content: str) -> list[tuple[str, float, float, str]]:
         text = '\n'.join(content_lines).strip()
         result.append((index_str, start, end, text))
     return result
+
 
 
 class SRTParser:
@@ -221,17 +325,7 @@ class SRTParser:
         if not all_wts:
             return []
 
-        sentences: list[list[WordTimestamp]] = []
-        current: list[WordTimestamp] = []
-        for i, wt in enumerate(all_wts):
-            current.append(wt)
-            if re.search(r'[.?!]\s*$', wt.word):
-                next_wt = all_wts[i + 1] if i + 1 < len(all_wts) else None
-                if next_wt is None or (next_wt.word and next_wt.word[0].isupper()):
-                    sentences.append(current)
-                    current = []
-        if current:
-            sentences.append(current)
+        sentences: list[list[WordTimestamp]] = _split_sentences(all_wts)
 
         raw = [
             (s[0].start, s[-1].end, " ".join(wt.word for wt in s), s)
@@ -289,18 +383,11 @@ class SRTParser:
             data = json.load(f)
         result: list[WordTimestamp] = []
         for seg in data.get("transcription", []):
-            text = seg.get("text", "")
-            text_stripped = text.strip()
-            had_leading_quote = text_stripped.startswith('"')
-            stripped = text_stripped.strip('"')
-            if not stripped or stripped.startswith("["):
+            text = seg.get("text", "").strip()
+            if not text or text.startswith("["):
                 continue
-            if had_leading_quote and stripped and stripped[0].isupper():
-                first_word = re.split(r"[\s']", stripped)[0]
-                if first_word not in _CAPITAL_LETTERS:
-                    stripped = stripped[0].lower() + stripped[1:]
             offsets = seg.get("offsets", {})
             start = offsets.get("from", 0) / 1000.0
             end = offsets.get("to", 0) / 1000.0
-            result.append(WordTimestamp(word=stripped, start=start, end=end))
+            result.append(WordTimestamp(word=text, start=start, end=end))
         return result

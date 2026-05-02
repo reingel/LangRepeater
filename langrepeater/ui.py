@@ -62,9 +62,9 @@ class RichUI:
         (", / .", "  end ±0.1s", "110"),
         ("    U", "merge",       "010"),
         ("    I", "split",       "010"),
-        ("    W", "retime start", "010"),
-        ("    E", "retime end",   "010"),
-        ("    R", "retime both",  "010"),
+        ("    W", "resync start", "010"),
+        ("    E", "resync end",   "010"),
+        ("    R", "resync both",  "010"),
     ]
     _HELP_INFO: list[tuple] = [
         ("P", "segment stats", "110"),

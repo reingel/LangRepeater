@@ -108,7 +108,7 @@ class AppController:
                     if Path(srt_candidate).exists() or _words_json_path(srt_candidate).exists() or _words_yaml_path(srt_candidate).exists():
                         self.srt_path = srt_candidate
                     else:
-                        self.ui.show_message("[dim]SRT file not found. Transcribing with whisper-cli...[/dim]")
+                        self.ui.show_message("[dim]SRT file not found. Transcribing with faster-whisper...[/dim]")
                         from .core import url_loader
                         try:
                             self.srt_path = url_loader.transcribe(session.media_path)
@@ -206,7 +206,7 @@ class AppController:
         if Path(srt_candidate).exists() or _words_json_path(srt_candidate).exists() or _words_yaml_path(srt_candidate).exists():
             self.srt_path = srt_candidate
         else:
-            self.ui.show_message("[dim]No matching srt file found. Transcribing with whisper-cli...[/dim]")
+            self.ui.show_message("[dim]No matching srt file found. Transcribing with faster-whisper...[/dim]")
             try:
                 self.srt_path = url_loader.transcribe(media_path)
             except Exception as e:
@@ -244,7 +244,7 @@ class AppController:
         if Path(srt_candidate).exists() or _words_json_path(srt_candidate).exists() or _words_yaml_path(srt_candidate).exists():
             self.srt_path = srt_candidate
         else:
-            self.ui.show_message("[dim]No matching srt file found. Transcribing with whisper-cli...[/dim]")
+            self.ui.show_message("[dim]No matching srt file found. Transcribing with faster-whisper...[/dim]")
             from .core import url_loader
             try:
                 self.srt_path = url_loader.transcribe(self.media_path)
@@ -1029,7 +1029,7 @@ class AppController:
         sys.stdout.flush()
 
     def _handle_resync_timestamp(self, resync_start: bool = True, resync_end: bool = True) -> None:
-        """W/E키: whisper-cli로 현재 구간 주변 오디오를 재분석하여 start/end timestamp 재조정."""
+        """W/E키: faster-whisper로 현재 구간 주변 오디오를 재분석하여 start/end timestamp 재조정."""
         if not self.subtitles:
             return
         sub = self.subtitles[self.current_index]
@@ -1048,23 +1048,15 @@ class AppController:
         clip_start = max(0.0, sub.start - start_pad)
         clip_end = sub.end + self._RESYNC_PADDING
 
-        self.ui.show_message("[dim]Resyncing timestamp with whisper-cli...[/dim]")
+        self.ui.show_message("[dim]Resyncing timestamp with faster-whisper...[/dim]")
         if self.player:
             self.player.stop()
 
         import tempfile
         import subprocess
-        import json as _json
-
-        model_path = Path(__file__).parents[1] / "models" / "ggml-small.bin"
-        if not model_path.exists():
-            self.ui.show_message("[red]모델 파일 없음: models/ggml-small.bin[/red]")
-            self._refresh_display()
-            return
 
         with tempfile.TemporaryDirectory() as tmpdir:
             clip_path = str(Path(tmpdir) / "clip.mp3")
-            # ffmpeg로 구간 추출
             ff = subprocess.run(
                 [
                     "ffmpeg", "-y",
@@ -1081,45 +1073,21 @@ class AppController:
                 self._refresh_display()
                 return
 
-            # whisper-cli 실행 (word-level JSON)
-            ws = subprocess.run(
-                [
-                    "whisper-cli",
-                    "-m", str(model_path),
-                    "-f", clip_path,
-                    "--output-json-full",
-                    "--split-on-word",
-                    "--max-len", "1",
-                    "--dtw", "tiny",
-                    "--no-prints",
-                ],
-                capture_output=True,
-                cwd=tmpdir,
-            )
-            if ws.returncode != 0:
-                self.ui.show_message("[red]whisper-cli 실패[/red]")
+            from .core import url_loader
+            try:
+                fw_model = url_loader.get_whisper_model()
+                fw_segments, _ = fw_model.transcribe(clip_path, word_timestamps=True)
+                words: list[tuple[str, float, float]] = []
+                for seg in fw_segments:
+                    for word in seg.words or []:
+                        text = word.word.strip()
+                        if not text or text.startswith("["):
+                            continue
+                        words.append((text, clip_start + word.start, clip_start + word.end))
+            except Exception as e:
+                self.ui.show_message(f"[red]faster-whisper 실패: {e}[/red]")
                 self._refresh_display()
                 return
-
-            json_path = Path(tmpdir) / "clip.mp3.json"
-            if not json_path.exists():
-                self.ui.show_message("[red]whisper 출력 파일 없음[/red]")
-                self._refresh_display()
-                return
-
-            with open(json_path, encoding="utf-8", errors="replace") as f:
-                data = _json.load(f)
-
-        # word timestamp 파싱 (clip 내 상대 시간 → 절대 시간)
-        words: list[tuple[str, float, float]] = []  # (word, abs_start, abs_end)
-        for seg in data.get("transcription", []):
-            text = seg.get("text", "").strip().strip('"')
-            if not text or text.startswith("["):
-                continue
-            offsets = seg.get("offsets", {})
-            rel_start = offsets.get("from", 0) / 1000.0
-            rel_end = offsets.get("to", 0) / 1000.0
-            words.append((text, clip_start + rel_start, clip_start + rel_end))
 
         if not words:
             self.ui.show_message("[red]whisper 결과에 단어 없음[/red]")

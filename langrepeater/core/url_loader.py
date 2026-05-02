@@ -32,32 +32,61 @@ def download(url: str, output_dir: str) -> str:
     return str(max(new_mp3, key=lambda p: p.stat().st_mtime))
 
 
+_whisper_model = None
+
+
+def get_whisper_model():
+    global _whisper_model
+    if _whisper_model is None:
+        from faster_whisper import WhisperModel
+        _whisper_model = WhisperModel("small", device="auto", compute_type="default")
+    return _whisper_model
+
+
+def _fmt_time(seconds: float) -> str:
+    m, s = divmod(int(seconds), 60)
+    return f"{m}:{s:02d}"
+
+
 def transcribe(audio_path: str) -> str:
-    """Generate word-level JSON from audio using whisper-cli.
+    """Transcribe audio to word-level JSON using faster-whisper.
 
-    Uses: whisper-cli -m models/ggml-small.bin -f input.mp3
-          --output-json-full --split-on-word --max-len 1 --dtw tiny
-
+    Requires: pip install faster-whisper
     Returns the srt_path (not yet generated; SRTParser.load() will build it from JSON).
     """
-    import subprocess
+    import json
+    import sys
 
-    model_path = Path(__file__).parents[2] / "models" / "ggml-small.bin"
-    result = subprocess.run(
-        [
-            "whisper-cli",
-            "-m", str(model_path),
-            "-f", audio_path,
-            "--output-json-full",
-            "--split-on-word",
-            "--max-len", "1",
-            "--dtw", "tiny",
-        ],
-        cwd=str(Path(audio_path).parent),
-    )
-    if result.returncode != 0:
-        raise RuntimeError("whisper-cli failed")
-    return str(Path(audio_path).with_suffix(".srt"))
+    model = get_whisper_model()
+    segments, info = model.transcribe(audio_path, word_timestamps=True)
+    total = info.duration
+
+    transcription = []
+    for segment in segments:
+        sys.stdout.write(
+            f"\r  {_fmt_time(segment.end)} / {_fmt_time(total)} ({segment.end / total * 100:3.0f}%)"
+        )
+        sys.stdout.flush()
+        for word in segment.words or []:
+            text = word.word.strip()
+            if not text or text.startswith("["):
+                continue
+            transcription.append({
+                "text": text,
+                "offsets": {
+                    "from": int(word.start * 1000),
+                    "to": int(word.end * 1000),
+                },
+            })
+    sys.stdout.write("\r" + " " * 40 + "\r")
+    sys.stdout.flush()
+
+    p = Path(audio_path)
+    json_path = p.parent / (p.stem + ".mp3.json")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump({"transcription": transcription}, f, ensure_ascii=False, indent=2)
+
+    return str(p.with_suffix(".srt"))
 
 
 def extract_audio(mp4_path: str) -> str:

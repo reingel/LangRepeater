@@ -26,39 +26,15 @@ brew install yt-dlp
 pip install yt-dlp
 ```
 
-### whisper-cli
+### faster-whisper
 
 Required for auto-generating subtitle files from audio and retiming timestamps.
 
-Install [whisper.cpp](https://github.com/ggerganov/whisper.cpp) and make `whisper-cli` available in your PATH.
-
-A model file is also required. Place it under `models/` in the project root.
-
-Available models (larger = more accurate, slower):
-
-| Model | Size | Command |
-|---|---|---|
-| tiny | ~75 MB | `bash models/download-ggml-model.sh tiny` |
-| base | ~142 MB | `bash models/download-ggml-model.sh base` |
-| small | ~466 MB | `bash models/download-ggml-model.sh small` |
-| medium | ~1.5 GB | `bash models/download-ggml-model.sh medium` |
-| large-v3 | ~3.1 GB | `bash models/download-ggml-model.sh large-v3` |
-
-The `download-ggml-model.sh` script is included in the whisper.cpp repository. Run it from the project root, or download manually:
-
 ```bash
-mkdir -p models
-
-# Option 1: use the whisper.cpp download script (recommended)
-bash /path/to/whisper.cpp/models/download-ggml-model.sh small
-cp /path/to/whisper.cpp/models/ggml-small.bin models/
-
-# Option 2: download directly with curl
-curl -L -o models/ggml-small.bin \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
+pip install faster-whisper
 ```
 
-`small` is recommended for a good balance of speed and accuracy. Update the model path in the transcription command if you use a different model.
+The `small` model (~460 MB) is downloaded automatically from HuggingFace on first use and cached at `~/.cache/huggingface/hub/`.
 
 ---
 
@@ -150,10 +126,10 @@ Type the sentence you heard and press `Enter`. Correct words are shown in green,
 | `X` | LR / Review | Start time +0.1s |
 | `,` | LR / Review | End time −0.1s |
 | `.` | LR / Review | End time +0.1s |
-| `W` | LR | Retime start using whisper-cli |
-| `E` | LR | Retime end using whisper-cli |
-| `R` | LR | Retime both start and end using whisper-cli |
-| `Y` | LR / Review | Retime using whisper-cli |
+| `W` | LR | Retime start using faster-whisper |
+| `E` | LR | Retime end using faster-whisper |
+| `R` | LR | Retime both start and end using faster-whisper |
+| `Y` | LR / Review | Retime using faster-whisper |
 
 ### Segment Editing (Listen & Repeat mode only)
 
