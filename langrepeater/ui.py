@@ -67,9 +67,9 @@ class RichUI:
         ("    R", "resync both",  "010"),
     ]
     _HELP_INFO: list[tuple] = [
-        ("P", "segment stats", "110"),
-        ("9", "date stats",    "110"),
-        ("0", "bookmark list", "010"),
+        ("P", "segment stats", "111"),
+        ("9", "date stats",    "111"),
+        ("0", "bookmark list", "011"),
     ]
     _HELP_SETTING: list[tuple] = [
         (";", "sibilant down", "110"),

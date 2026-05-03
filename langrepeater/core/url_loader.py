@@ -58,7 +58,12 @@ def transcribe(audio_path: str) -> str:
     import sys
 
     model = get_whisper_model()
-    segments, info = model.transcribe(audio_path, word_timestamps=True)
+    segments, info = model.transcribe(
+        audio_path,
+        word_timestamps=True,
+        multilingual=True,
+        condition_on_previous_text=False,
+    )
     total = info.duration
 
     transcription = []

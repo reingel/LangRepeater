@@ -464,6 +464,14 @@ class AppController:
                     self._handle_goto()
                 elif action == Action.RESTART and self._mode == "L":
                     self._handle_restart()
+                elif action == Action.PRINT_STATS and self._mode == "L":
+                    self._handle_print_stats()
+                    self._showing_stats = True
+                elif action == Action.PRINT_DATE_STATS and self._mode == "L":
+                    self._handle_print_date_stats()
+                    self._showing_date_stats = True
+                elif action == Action.BOOKMARK_LIST and self._mode == "L":
+                    self._handle_bookmark_list()
                 elif self._mode == "L":
                     pass  # L모드에서는 위 키 외 다른 키 무시
                 elif action == Action.GOTO and self._mode != "R":
@@ -1076,7 +1084,12 @@ class AppController:
             from .core import url_loader
             try:
                 fw_model = url_loader.get_whisper_model()
-                fw_segments, _ = fw_model.transcribe(clip_path, word_timestamps=True)
+                fw_segments, _ = fw_model.transcribe(
+                    clip_path,
+                    word_timestamps=True,
+                    multilingual=True,
+                    condition_on_previous_text=False,
+                )
                 words: list[tuple[str, float, float]] = []
                 for seg in fw_segments:
                     for word in seg.words or []:
@@ -1540,7 +1553,7 @@ class AppController:
         stats = self.stats_store.load(self.media_path)
         self._stats_sub_map = {sub.index: sub for sub in self.subtitles}
         self._stats_ranked = sorted(
-            stats.subtitle_play_counts.items(),
+            [(sub.index, stats.subtitle_play_counts.get(sub.index, 0)) for sub in self.subtitles],
             key=lambda x: _index_key(x[0]),  # 자막 순번 오름차순
         )
         self._stats_total_seconds = sum(
