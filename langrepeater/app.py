@@ -95,9 +95,15 @@ class AppController:
             if choice == "quit":
                 return False
             if choice == "resume":
-                idx = self.ui.ask_resume_session(sessions)
-                if idx is None:
+                result = self.ui.ask_resume_session(sessions)
+                if result is None:
                     continue
+                if isinstance(result, tuple) and result[0] == "delete":
+                    del_idx = result[1]
+                    self.stats_store.delete(sessions[del_idx].media_path)
+                    self.progress_store.delete(del_idx)
+                    continue
+                idx = result
                 session = sessions[idx]
                 self.media_path = session.media_path
                 self.current_index = session.current_index
@@ -123,9 +129,6 @@ class AppController:
                 if self._load_from_url(url=url):
                     return True
                 continue
-            if choice == "delete":
-                self._handle_delete_session(sessions)
-                continue
             # "new" = new local file
             if sessions:
                 prev_dir = str(Path(sessions[0].media_path).parent)
@@ -142,15 +145,6 @@ class AppController:
             if self._select_files(start_dir):
                 return True
             continue
-
-    def _handle_delete_session(self, sessions: list) -> None:
-        idx = self.ui.ask_delete_session(sessions)
-        if idx is None:
-            return
-        if self.ui.confirm_delete(sessions[idx]):
-            self.stats_store.delete(sessions[idx].media_path)
-            self.progress_store.delete(idx)
-            self.ui.show_message("[dim]Session deleted.[/dim]")
 
     def _load_from_url(self, url: str | None = None) -> bool:
         from .core import url_loader

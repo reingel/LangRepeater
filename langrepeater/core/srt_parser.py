@@ -131,6 +131,25 @@ def _split_sentences(all_wts: list) -> list:
     return _split_sentences_by_timing(all_wts)
 
 
+_ATTACH_TO_PREV_RE = re.compile(r"^[,\-.:!?;)\]]")
+_ATTACH_TO_NEXT_RE = re.compile(r"[-(\[{]$")
+
+
+def _join_words(words: list[str]) -> str:
+    """Join whisper tokens with spaces, suppressing spaces where punctuation attaches to the previous token."""
+    if not words:
+        return ""
+    parts = [words[0]]
+    for word in words[1:]:
+        if word and _ATTACH_TO_PREV_RE.match(word):
+            parts.append(word)
+        elif parts[-1] and _ATTACH_TO_NEXT_RE.search(parts[-1]):
+            parts.append(word)
+        else:
+            parts.append(" " + word)
+    return "".join(parts)
+
+
 def _strip_font_tags(text: str) -> str:
     """Remove <font ...>...</font> tags, keeping inner text."""
     return re.sub(r'<font[^>]*>(.*?)</font>', r'\1', text, flags=re.DOTALL).strip()
@@ -328,7 +347,7 @@ class SRTParser:
         sentences: list[list[WordTimestamp]] = _split_sentences(all_wts)
 
         raw = [
-            (s[0].start, s[-1].end, " ".join(wt.word for wt in s), s)
+            (s[0].start, s[-1].end, _join_words([wt.word for wt in s]), s)
             for s in sentences
         ]
 

@@ -82,6 +82,7 @@ class RichUI:
     # ── 메뉴 힌트 ─────────────────────────────────────────────────────────────
     _HINT_MENU     = "[dim]↑/↓: move  |  Enter: select  |  ESC: back[/dim]"
     _HINT_HOME     = "[dim]↑/↓: move  |  Enter: select  |  Q: quit[/dim]"
+    _HINT_RESUME   = "[dim]↑/↓: move  |  Enter: select  |  D: delete  |  ESC: back[/dim]"
     _HINT_BOOKMARK = "[dim]↑/↓: move  |  Enter: go  |  [ ]: prev/next page  |  any key: back[/dim]"
 
     # ── 통계 화면 컬럼 헤더 ───────────────────────────────────────────────────
@@ -459,7 +460,7 @@ class RichUI:
                     console.print(f"[dim white]{indent}{chunk}[/dim white]")
 
     def show_home_menu(self, has_sessions: bool) -> str:
-        """Show home menu. Returns: 'resume'|'new'|'url'|'delete'|'quit'."""
+        """Show home menu. Returns: 'resume'|'new'|'url'|'quit'."""
         items: list[str] = []
         keys: list[str] = []
         if has_sessions:
@@ -469,9 +470,6 @@ class RichUI:
         keys.append("new")
         items.append("Enter URL")
         keys.append("url")
-        if has_sessions:
-            items.append("Delete a session")
-            keys.append("delete")
 
         def _header():
             console.clear()
@@ -484,8 +482,14 @@ class RichUI:
             return "quit"
         return keys[result]
 
-    def ask_resume_session(self, sessions: list[Session]) -> int | None:
-        """Show session list for resuming. Returns index or None to cancel."""
+    def ask_resume_session(self, sessions: list[Session]) -> int | tuple | None:
+        """Show session list for resuming.
+
+        Returns:
+          int             — index to resume
+          ("delete", int) — index to delete (y confirmed inline)
+          None            — cancelled
+        """
         bar_width = 20
 
         def _stem(path: str) -> str:
@@ -513,34 +517,62 @@ class RichUI:
         items     = [_line(s, bright=True)  for s in sessions]
         dim_items = [_line(s, bright=False) for s in sessions]
 
-        def _header():
+        def _render(sel: int) -> None:
             self.show_welcome()
-            console.print("\n[bold]Select session to resume:[/bold]")
+            console.print("\n[bold]Select session to resume:[/bold]\n")
+            for i, item in enumerate(items):
+                if i == sel:
+                    console.print(f"  [bold magenta]▶︎[/]  {item}", highlight=False)
+                else:
+                    console.print(f"     {dim_items[i]}", highlight=False)
+            console.print(f"\n{self._HINT_RESUME}")
 
-        return self._run_menu(items, dim_items, draw_fn=_header)
+        selected = 0
+        _render(selected)
 
-    def ask_delete_session(self, sessions: list[Session]) -> int | None:
-        items = [
-            f"{Path(s.media_path).name}  [dim](segment {s.current_index + 1})[/dim]"
-            for s in sessions
-        ]
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            while True:
+                rlist, _, _ = _select.select([fd], [], [], 1.0)
+                if not rlist:
+                    continue
+                ch = os.read(fd, 1)
 
-        def _header():
-            self.show_welcome()
-            console.print("\n[bold]Select session to delete:[/bold]")
-
-        return self._run_menu(items, draw_fn=_header)
-
-    def confirm_delete(self, session: Session) -> bool:
-        name = Path(session.media_path).name
-        items = ["Yes, delete", "Cancel"]
-
-        def _header():
-            self.show_welcome()
-            console.print(f"\nDelete [bold]{name}[/bold]?")
-
-        result = self._run_menu(items, draw_fn=_header, selected=1)
-        return result == 0
+                if ch == b'\x1b':
+                    r2, _, _ = _select.select([fd], [], [], 0.05)
+                    if not r2:
+                        return None
+                    ch2 = os.read(fd, 1)
+                    if ch2 == b'[':
+                        r3, _, _ = _select.select([fd], [], [], 0.05)
+                        if r3:
+                            ch3 = os.read(fd, 1)
+                            if ch3 == b'A':
+                                selected = max(0, selected - 1)
+                                _render(selected)
+                            elif ch3 == b'B':
+                                selected = min(len(sessions) - 1, selected + 1)
+                                _render(selected)
+                elif ch in (b'\r', b'\n'):
+                    return selected
+                elif ch in (b'd', b'D'):
+                    stem = Path(sessions[selected].media_path).stem
+                    _render(selected)
+                    console.print(f"\n  Delete [bold]{stem}[/bold]? \[y/N] ", end="", highlight=False)
+                    sys.stdout.flush()
+                    while True:
+                        r4, _, _ = _select.select([fd], [], [], 1.0)
+                        if not r4:
+                            continue
+                        answer = os.read(fd, 1)
+                        if answer in (b'y', b'Y'):
+                            return ("delete", selected)
+                        _render(selected)
+                        break
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
     @staticmethod
     def _open_file_dialog(initial_dir: str = "~") -> str | None:
@@ -880,11 +912,11 @@ class RichUI:
                     " [magenta]▶︎[/magenta] "
                     f"[cyan]{idx:<5}[/cyan]{marker}[green]{count:>3}[/green]{play}[white]{text}[/white]"
                     "[/bold]"
-                )
+                , highlight=False)
             else:
                 console.print(
-                    f"   [dim]{idx:<5}[/dim]{marker}[dim][green]{count:>3}[/green][/dim]{play}[dim]{text}[/dim]"
-                )
+                    f"   [dim white]{idx:<5}[/dim white]{marker}[dim][green]{count:>3}[/green][/dim]{play}[dim]{text}[/dim]"
+                , highlight=False)
         hours, rem = divmod(int(total_seconds), 3600)
         minutes, seconds = divmod(rem, 60)
         time_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
@@ -1094,9 +1126,9 @@ class RichUI:
                     " [magenta]▶︎[/magenta] "
                     f"[cyan]{sub_idx:<5}[/cyan]{marker}[green]{count:>3}[/green]{play}[white]{text}[/white]"
                     "[/bold]"
-                )
+                , highlight=False)
             else:
-                console.print(f"   [dim]{sub_idx:<5}[/dim]{marker}[dim][green]{count:>3}[/green][/dim]{play}[dim]{text}[/dim]")
+                console.print(f"   [dim]{sub_idx:<5}[/dim]{marker}[dim][green]{count:>3}[/green][/dim]{play}[dim]{text}[/dim]", highlight=False)
         console.print(f"\n[dim]Page {page + 1}/{page_count}[/dim]")
 
     def show_stats(self, total_play: int, subtitle_index: int, subtitle_play: int) -> None:
