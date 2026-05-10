@@ -74,6 +74,7 @@ class AppController:
         self._bookmark_cursor: int = 0  # 북마크 목록 내 절대 커서 위치
         self._stats_cursor: int = 0  # 통계 화면 내 절대 커서 위치
         self._sentence_play_origin: int = -1  # S키 문장 전체 재생 중 복귀할 원래 인덱스 (-1 = 비활성)
+        self._return_to_resume: bool = False  # ESC 시 홈 메뉴 건너뛰고 이전학습 선택으로 이동
 
     def run(self) -> None:
         while True:
@@ -88,10 +89,17 @@ class AppController:
     # ------------------------------------------------------------------
 
     def _setup_session(self) -> bool:
+        skip_to_resume = self._return_to_resume
+        self._return_to_resume = False
         while True:
             self.ui.show_welcome()
             sessions = self.progress_store.load()
-            choice = self.ui.show_home_menu(has_sessions=bool(sessions))
+            if skip_to_resume and sessions:
+                skip_to_resume = False
+                choice = "resume"
+            else:
+                skip_to_resume = False
+                choice = self.ui.show_home_menu(has_sessions=bool(sessions))
             if choice == "quit":
                 return False
             if choice == "resume":
@@ -382,6 +390,7 @@ class AppController:
                     running = False
                 elif action == Action.HOME:
                     self._handle_home()
+                    self._return_to_resume = True
                     restart = True
                     running = False
                 elif action == Action.MODE_LISTENING:
